@@ -84,3 +84,6 @@ Greater precision than one decimal place serves no purpose
 This work is from wlsunset, maintained by Kenny Levinsen
 (https://sr.ht/~kennylevinsen/wlsunset).
 
+Important: 
+The data_array file is a text file containing three rows per colour,
+newline terminated.
