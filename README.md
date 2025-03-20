@@ -5,6 +5,8 @@ wlmonitorset
 Command line night light application for wlroots compositors.
 This work is from wlsunset.
 
+In testing stage.
+
 How to build and install:
 
 meson build
