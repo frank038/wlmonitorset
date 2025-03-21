@@ -69,6 +69,7 @@ The -f 1 option has priority over the -T option.
     Each row has 256 values, float numbers from 0.0 to 1.0.
     When used, the next colour corrections will be applied on to this curve.
     The gamma option has no effect with this option.
+    (The curve(s) can be created following what is described in my create-icc program).
 
 
 # EXAMPLE
