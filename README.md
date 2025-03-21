@@ -88,5 +88,5 @@ This work is from wlsunset, maintained by Kenny Levinsen
 (https://sr.ht/~kennylevinsen/wlsunset).
 
 Important: 
-The data_array file is a text file containing three rows per colour,
+The data_array file is a text file containing three rows, one per colour channel,
 newline terminated.
