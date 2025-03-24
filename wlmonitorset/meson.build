@@ -1,7 +1,6 @@
 project(
 	'wlmonitorset',
 	'c',
-	version: '0.0.1',
 	license: 'MIT',
 	meson_version: '>=0.56.0',
 	default_options: [
@@ -26,7 +25,6 @@ add_project_arguments(
 		'-Wno-unused-command-line-argument',
 		'-Wvla',
 		'-Wl,--exclude-libs=ALL',
-		'-DWLSUNSET_VERSION="@0@"'.format(meson.project_version()),
 	],
 	language: 'c',
 )

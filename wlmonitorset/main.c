@@ -19,6 +19,7 @@
 #include "wlr-gamma-control-unstable-v1-client-protocol.h"
 #include "str_vec.h"
 
+#define WLMONITORSET_VERSION "0.2"
 #define MAX_STRING (256*23)
 
 int set_timer2(struct itimerspec timerspec,int t);
@@ -395,25 +396,22 @@ static void fill_gamma_table2(uint16_t *table, uint32_t ramp_size, double rrw,
     
     int step_ramp_size = (ramp_size/256);
     int mod_ramp_size = (ramp_size%256);
-    
+
     for (int a=1;a<mod_ramp_size;a++) {
         r[0] = (uint16_t)(UINT16_MAX * 0 * rrw);
         g[0] = (uint16_t)(UINT16_MAX * 0 * ggw);
         b[0] = (uint16_t)(UINT16_MAX * 0 * bbw);
     }
-
     int j = 0;
     for (uint32_t i = 1; i < ramp_size; ) {
         float rw = atof(temp[0][j]);
         float gw = atof(temp[1][j]);
         float bw = atof(temp[2][j]);
-
+        
         for (int jj=0;jj<step_ramp_size;++jj) {
-            
             r[i] = (uint16_t)(UINT16_MAX * rw * rrw);
             g[i] = (uint16_t)(UINT16_MAX * gw * ggw);
             b[i] = (uint16_t)(UINT16_MAX * bw * bbw);
-            
             ++i;
         }
         ++j;
@@ -557,8 +555,6 @@ struct rgb calc_whitepoint2(int temp) {
 timer_t mytimer;
 static void set_temperature(struct wl_list *outputs, int temp, double gamma) {
 	struct output *output;
-    fprintf(stderr, "Temperature setted to: %d K\n", temp);
-    
     struct rgb wp = calc_whitepoint2(temp);
 	wl_list_for_each(output, outputs, link) {
 		if (output->gamma_control == NULL) {
@@ -622,6 +618,7 @@ static int display_dispatch(struct wl_display *display, int timeout) {
 			timer_fired = true;
 			break;
 		case SIGUSR1:
+			// do something
 			usr1_fired = true;
 			break;
 		}
@@ -688,9 +685,7 @@ static int setup_signals(struct context *ctx) {
 
 // HH and MM in unix time from 00:00 of the time; today ro tomorrow
 static int parse_time_of_day(const char *s, time_t *time) {
-    
 	struct tm tm = { 0 };
-
 	if (strptime(s, "%H:%M", &tm) == NULL) {
 		return -1;
 	}
@@ -709,7 +704,7 @@ struct itimerspec set_struct2(void) {
 int set_timer2(struct itimerspec timerspec,int next_time) {
     timerspec.it_value.tv_sec = next_time;
     timer_settime(mytimer, TIMER_ABSTIME, &timerspec, NULL);
-    printf("* Set timer next time: %s\n", ctime(&timerspec.it_value.tv_sec));
+    //printf("* Set timer next time: %s\n", ctime(&timerspec.it_value.tv_sec));
     return 0;
 }
 
@@ -718,24 +713,19 @@ time_t start_time = 0;
 int time_to_today(int dd) {
     time_t rawtime;
     struct tm * timeinfo;
-    //int year=2013, month=5, day=7, hour = 0, min = 0, sec = 0;
-    //int day = 0, hour = 0, min = 0, sec = 0;
     int hour = 0, min = 0, sec = 0;
-    
-    /* get current timeinfo: */
     time ( &rawtime );
-    /* convert to struct: */
     timeinfo = localtime ( &rawtime );
-    timeinfo->tm_mday += dd;
-    timeinfo->tm_hour   = hour;         //hours since midnight - [0,23]
-    timeinfo->tm_min    = min;          //minutes after the hour - [0,59]
-    timeinfo->tm_sec    = sec;          //seconds after the minute - [0,59]
+    timeinfo->tm_mday   += dd;
+    timeinfo->tm_hour   = hour;
+    timeinfo->tm_min    = min;
+    timeinfo->tm_sec    = sec;
 
-    ///* call mktime: create unix time stamp from timeinfo struct */
     int date = mktime ( timeinfo );
     return date;
 }
 
+// return now in unix time
 time_t date_time_today(void) {
     struct timespec realtime;
     clock_gettime(CLOCK_REALTIME, &realtime);
@@ -792,8 +782,6 @@ int f_time_to_add(int sunrise, int sunset, int dusk, int *time_to_add, int *what
         *what_cal = 1;
     }
     
-    time_t next_time = *time_to_add;
-    printf("Next time is %s",ctime(&next_time));
     return 0;
 }
 
@@ -812,7 +800,7 @@ static int wlrun(struct config cfg) {
             icfile = 0;
         }
     }
-    
+
 	wl_list_init(&ctx.outputs);
 
 	if (setup_signals(&ctx) == -1) {
@@ -821,6 +809,7 @@ static int wlrun(struct config cfg) {
 
 	struct wl_display *display = wl_display_connect(NULL);
 	if (display == NULL) {
+		fprintf(stderr, "failed to create display\n");
 		return EXIT_FAILURE;
 	}
 	struct wl_registry *registry = wl_display_get_registry(display);
@@ -828,6 +817,7 @@ static int wlrun(struct config cfg) {
 	wl_display_roundtrip(display);
 
 	if (ctx.gamma_control_manager == NULL) {
+		fprintf(stderr, "compositor doesn't support wlr-gamma-control-unstable-v1\n");
 		return EXIT_FAILURE;
 	}
 	struct output *output;
@@ -847,7 +837,6 @@ static int wlrun(struct config cfg) {
             set_timer2(timerspec,time_to_add);
         }
     }
-    
     int htemp = ctx.config.high_temp;
     int ltemp = ctx.config.low_temp;
     int dtemp = ctx.config.dusk_temp;
@@ -868,9 +857,9 @@ static int wlrun(struct config cfg) {
     } else {
         temp = ltemp;
     }
-
     if (temp>0 && temp != 6500) {
         set_temperature(&ctx.outputs, temp, ctx.config.gamma);
+        fprintf(stderr, "Temperature setted to: %d K\n", temp);
     }
     
     int htemp2 = ctx.config.high_temp;
@@ -879,12 +868,12 @@ static int wlrun(struct config cfg) {
     int temp_to_step;
     int step = 10;
     int temp_step = 0;
+    
     int time_to_remove = ctx.config.duration;
     int time_to_remove_step = (int)(time_to_remove/step);
-    
     time_to_add = 0;
     f_time_to_add(ctx.config.sunrise,ctx.config.sunset,ctx.config.dusk,&time_to_add,&what_cal);
-
+    
     if (what_cal == 1) { // now in sunrise time, next sunset
         if ( icfile == 0 && htemp != 6500) {
             temp = htemp;
@@ -913,7 +902,6 @@ static int wlrun(struct config cfg) {
     } else if (what_cal == 3) {
         temp_to_step = (dtemp2-htemp2);
     }
-    
     temp_step = (int)(temp_to_step/step);
     time_to_remove = ctx.config.duration;
     time_to_remove_step = (int)(time_to_remove/step);
@@ -926,8 +914,9 @@ static int wlrun(struct config cfg) {
         
         if (timer_fired) {
 			timer_fired = false;
-
+            
             if (time_to_remove == 0) {
+                fprintf(stderr, "Temperature setted to: %d K\n", temp);
                 // reset
                 time_to_add = 0; // sunrise/sunset and unix_time_to_prev_midnight of today or of tomorrow
                 what_cal = 0; // 0 reset
@@ -949,6 +938,7 @@ static int wlrun(struct config cfg) {
                 time_to_remove = ctx.config.duration;
                 temp_step = (int)(temp_to_step/step);
             } else {
+                /*   */
                 struct itimerspec timerspec = set_struct2();
                 time_to_add += time_to_remove_step;
                 set_timer2(timerspec,time_to_add);
@@ -1059,7 +1049,7 @@ int main(int argc, char *argv[]) {
                 mynot = optarg;
                 break;
             case 'v':
-				printf("wlsunset version %s\n", WLSUNSET_VERSION);
+				printf("wlmonitorset version %s\n", WLMONITORSET_VERSION);
 				ret = EXIT_SUCCESS;
 				goto end;
 			case 'h':
@@ -1084,9 +1074,16 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Temp (%d) must be higher than 1500\n", config.low_temp);
 		goto end;
 	}
+    if (config.sunset && (config.sunrise+config.duration) >= config.sunset) {
+        fprintf(stderr, "Sunrise time and/or duration wrong values: less than sunset.\n");
+		goto end;
+    }
+    if (config.dusk && (config.sunset+config.duration) >= config.dusk) {
+        fprintf(stderr, "Sunset time and/or duration wrong values: less than dusk.\n");
+		goto end;
+    }
 	ret = wlrun(config);
 end:
 	str_vec_free(&config.output_names);
 	return ret;
 }
-
