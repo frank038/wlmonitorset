@@ -65,7 +65,8 @@ The -f 1 option has priority over the -T option.
 *-f 1* 
     Use the data in the data_array file as starting curve,
     that becomes the default starting rgb values for the monitor.
-    The data_array file is a text file containing three rows per colour.
+    The data_array file is a text file containing three rows, one per colour,
+    newline terminated per colour.
     Each row has 256 values, float numbers from 0.0 to 1.0.
     When used, the next colour corrections will be applied on to this curve.
     The gamma option has no effect with this option.
@@ -86,7 +87,3 @@ Greater precision than one decimal place serves no purpose
 
 This work is from wlsunset, maintained by Kenny Levinsen
 (https://sr.ht/~kennylevinsen/wlsunset).
-
-Important: 
-The data_array file is a text file containing three rows, one per colour channel,
-newline terminated.
