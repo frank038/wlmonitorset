@@ -86,9 +86,6 @@ to be used with wlmonitorset. Just compile it with the command: gcc main.c -lm -
 and set some options, for example: ./create_curve -r 0.0:0.5:1.0 -g 0.0:0.5:1.0 -b 0.0:0.5:1.0 (in this case three values per colour channel; three flat curves - from 0.0 to 1.0 - will be implemented in the file data_array, that can be used by wlmonitorset if the case). The number of data per colour channel to pass as option must be 3 or 5 or 8.
 
 
-Greater precision than one decimal place serves no purpose
-(https://xkcd.com/2170/) other than padding the command-line.
-
 # AUTHORS
 
 This work is from wlsunset, maintained by Kenny Levinsen
