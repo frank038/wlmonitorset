@@ -124,14 +124,12 @@ int set_splines(char * values, int n) {
         fp = fopen("data_array","w");
         if (fp == NULL) {
             printf("Cannot create the file data_array.\n");
-            fclose(fp);
             return -1;
         }
     } else {
         fp = fopen("data_array","a");
         if (fp == NULL) {
             printf("Cannot create the file data_array.\n");
-            fclose(fp);
             return -1;
         }
     }
