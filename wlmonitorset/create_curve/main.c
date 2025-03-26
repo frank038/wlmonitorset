@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <math.h>
 
-#define PROG_VER "1.0"
+#define PROG_VER "1.1"
 
 #define MAX_VAL 1000
 
@@ -175,6 +175,7 @@ int set_splines(char * values, int n) {
             }
         }
     } else {
+        fclose(fp);
         printf("wrong number of elements: %d instead of 8 or 5 or 3\n",j);
         return -1;
     }
