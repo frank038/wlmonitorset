@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <math.h>
 
-#define PROG_VER "1.1"
+#define PROG_VER "1.2"
 
 #define MAX_VAL 1000
 
@@ -27,12 +27,24 @@ int main(int argc, char *argv[]) {
         {  
             case 'r':
                 strcpy(ret_r,optarg);
+                if (strlen(ret_r) > 999) {
+                    printf("Too much decimals or values: red channel.\n");
+                    return 0;
+                }
                 break;
             case 'g':
                 strcpy(ret_g,optarg);
+                if (strlen(ret_g) > 999) {
+                    printf("Too much decimals or values: green channel.\n");
+                    return 0;
+                }
                 break;
             case 'b':
                 strcpy(ret_b,optarg);
+                if (strlen(ret_b) > 999) {
+                    printf("Too much decimals or values: blue channel.\n");
+                    return 0;
+                }
                 break;
             case 'h': case '?':
                 printf("create_curve v. %s\n\
