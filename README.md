@@ -68,7 +68,7 @@ The -f 1 option has priority over the -T option.
     The data_array file is a text file containing three rows, one per colour,
     newline terminated per colour.
     Each row has 256 values, float numbers from 0.0 to 1.0.
-    When used, the next colour corrections will be applied on to this curve.
+    If used, the next colour corrections will be applied on to this curve.
     The gamma option has no effect with this option.
     (The curve(s) can be created following what is described in my create-icc program).
 
