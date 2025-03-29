@@ -81,12 +81,11 @@ wlmonitorset -T 6500 -t 4000 -S 08:00 -s 18:00
 ```
 
 # CREATE_CURVE
-In the folder create_curve is a helper program that let user to create a smooth curve
+In the folder create_curve is a helper program that let user create a smooth curve
 to be used with wlmonitorset. Just compile it with the command: gcc main.c -lm -o create_curve 
-and set some options, for example: ./create_curve -r 0.0:0.5:1.0 -g 0.0:0.5:1.0 -b 0.0:0.5:1.0 (in this case three values per colour channel; three flat curves - from 0.0 to 1.0 - will be implemented in the file data_array, that can be used by wlmonitorset if the case). The number of data per colour channel to pass as option must be 3 or 5 or 8.
+and set some options, for example: ./create_curve -r 0.0:0.5:1.0 -g 0.0:0.5:1.0 -b 0.0:0.5:1.0 (in this case three values per colour channel; three flat curves - from 0.0 to 1.0 - will be implemented in the file data_array, that can be used by wlmonitorset if the case). The number of data per colour channel to pass as options must be 3 or 5 or 8.
 
 
 # AUTHORS
 
 This work is from wlsunset, maintained by Kenny Levinsen
-(https://sr.ht/~kennylevinsen/wlsunset).
