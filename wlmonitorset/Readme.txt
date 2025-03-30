@@ -55,13 +55,14 @@ wlr-gamma-control-unstable-v1. Can be used three periods of the day.
 *-o* <output>
     Name of output (display) to use (default: all)."
 
-*-f 1* 
+*-f <type>*
+    1 linear interpolation (default); 2 previous behaviour.
     Use the data in the data_array file as starting curve,
     that becomes the default starting rgb values for the monitor.
     The data_array file is a text file containing three rows, one per colour,
     newline terminated.
     Each row has 256 values, float numbers from 0.0 to 1.0.
-    When used, the next colour corrections will be applied on to this curve.
+    If used, the next colour corrections will be applied on to this curve.
     The gamma option has no effect with this option.
 
 
@@ -72,11 +73,16 @@ wlr-gamma-control-unstable-v1. Can be used three periods of the day.
 wlmonitorset -T 6500 -t 4000 -S 08:00 -s 18:00 
 ```
 
-Greater precision than one decimal place serves no purpose
-(https://xkcd.com/2170/) other than padding the command-line.
+# CREATE_CURVE
+In the folder create_curve is a helper program that let user create 
+a smooth curve to be used with wlmonitorset. Just compile it with 
+the command: gcc main.c -lm -o create_curve and set some options, 
+for example: ./create_curve -r 0.0:0.5:1.0 -g 0.0:0.5:1.0 -b 0.0:0.5:1.0 
+(in this case three values per colour channel; three flat curves 
+- from 0.0 to 1.0 - will be implemented in the file data_array, 
+that can be used by wlmonitorset if the case). The number of data 
+per colour channel to pass as options must be 3 or 5 or 8.
 
 # AUTHORS
 
 This work is from wlsunset, maintained by Kenny Levinsen
-(https://sr.ht/~kennylevinsen/wlsunset).
-

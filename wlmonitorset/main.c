@@ -19,7 +19,7 @@
 #include "wlr-gamma-control-unstable-v1-client-protocol.h"
 #include "str_vec.h"
 
-#define WLMONITORSET_VERSION "0.2"
+#define WLMONITORSET_VERSION "0.3"
 #define MAX_STRING (256*23)
 
 int set_timer2(struct itimerspec timerspec,int t);
@@ -30,12 +30,13 @@ time_t date_time_today(void);
 int f_time_to_add(int sunrise, int sunset, int dusk, int *t, int *d);
 int get_data_array(void);
 
-int icfile = 0; // for icc like setting: 1 use
+int icfile = 0; // for icc like setting: 1 or 2 use it
 char myicfile[] = "data_array";
 //int iopt = 0; // whether to use notifications
 char *mynot; // whether to use notifications: program name
 
-char temp[3][256][22];
+
+char temp[3][256][22]; // 256 values per colour channel
 int get_data_array(void) {
     
     FILE *fp = fopen("data_array","r");
@@ -374,6 +375,7 @@ static const struct wl_registry_listener registry_listener = {
 	.global_remove = registry_handle_global_remove,
 };
 
+
 static void fill_gamma_table(uint16_t *table, uint32_t ramp_size, double rw,
 		double gw, double bw, double gamma) {
 	uint16_t *r = table;
@@ -387,7 +389,71 @@ static void fill_gamma_table(uint16_t *table, uint32_t ramp_size, double rw,
 	}
 }
 
-// with data_array
+
+// linear interpolation
+static void fill_gamma_table1(uint16_t *table, uint32_t ramp_size, double rrw,
+                            double ggw, double bbw) {
+    uint16_t *r = table;
+	uint16_t *g = table + ramp_size;
+	uint16_t *b = table + 2 * ramp_size;
+    
+    int step_ramp_size = (ramp_size/256);
+    int mod_ramp_size = (ramp_size%256);
+    
+    float rw = 0.0;
+    float gw = 0.0;
+    float bw = 0.0;
+    
+    float rw2 = 0.0;
+    float gw2 = 0.0;
+    float bw2 = 0.0;
+    
+    float rwt = 0.0;
+    float gwt = 0.0;
+    float bwt = 0.0;
+    
+    int a;
+    // spare values
+    for (a=0;a<mod_ramp_size;++a) {
+        r[a] = (uint16_t)(UINT16_MAX * 0 * rrw);
+        g[a] = (uint16_t)(UINT16_MAX * 0 * ggw);
+        b[a] = (uint16_t)(UINT16_MAX * 0 * bbw);
+    }
+    
+    int j = 0; // total fields from data_array: 256 - 0 to 255
+    for (uint32_t i = a; i < ramp_size; i += 1024) {
+        // initial values of each step
+        rw = atof(temp[0][j]);
+        gw = atof(temp[1][j]);
+        bw = atof(temp[2][j]);
+        
+        if (j < 255) {
+            // next data in data_array
+            rw2 = atof(temp[0][j+1]);
+            gw2 = atof(temp[1][j+1]);
+            bw2 = atof(temp[2][j+1]);
+            // interpolation (for the whole lenght of the step)
+            rwt = (rw2-rw)/step_ramp_size;
+            gwt = (gw2-gw)/step_ramp_size;
+            bwt = (bw2-bw)/step_ramp_size;
+        } else if (j == 255) {
+            rwt = 0.0;
+            gwt = 0.0;
+            bwt = 0.0;
+        }
+        
+        for (int jj=0;jj<step_ramp_size;++jj) {
+            // i is constant in this cicle while jj vary
+            r[i+jj] = (uint16_t)(UINT16_MAX * (rw+rwt*jj) * rrw);
+            g[i+jj] = (uint16_t)(UINT16_MAX * (gw+gwt*jj) * ggw);
+            b[i+jj] = (uint16_t)(UINT16_MAX * (bw+bwt*jj) * bbw);
+        }
+        ++j;
+    }
+} 
+
+
+// previous behaviour
 static void fill_gamma_table2(uint16_t *table, uint32_t ramp_size, double rrw,
                             double ggw, double bbw) {
     uint16_t *r = table;
@@ -396,34 +462,43 @@ static void fill_gamma_table2(uint16_t *table, uint32_t ramp_size, double rrw,
     
     int step_ramp_size = (ramp_size/256);
     int mod_ramp_size = (ramp_size%256);
-
-    for (int a=1;a<mod_ramp_size;a++) {
-        r[0] = (uint16_t)(UINT16_MAX * 0 * rrw);
-        g[0] = (uint16_t)(UINT16_MAX * 0 * ggw);
-        b[0] = (uint16_t)(UINT16_MAX * 0 * bbw);
+    
+    float rw = 0.0;
+    float gw = 0.0;
+    float bw = 0.0;
+    
+    int a;
+    for (a=0;a<mod_ramp_size;a++) {
+        r[a] = (uint16_t)(UINT16_MAX * 0 * rrw);
+        g[a] = (uint16_t)(UINT16_MAX * 0 * ggw);
+        b[a] = (uint16_t)(UINT16_MAX * 0 * bbw);
     }
-    int j = 0;
-    for (uint32_t i = 1; i < ramp_size; ) {
-        float rw = atof(temp[0][j]);
-        float gw = atof(temp[1][j]);
-        float bw = atof(temp[2][j]);
+    
+    int j = 0; // total fields: 256
+    for (uint32_t i = a; i < ramp_size; ) {
+        rw = atof(temp[0][j]);
+        gw = atof(temp[1][j]);
+        bw = atof(temp[2][j]);
         
         for (int jj=0;jj<step_ramp_size;++jj) {
+            
             r[i] = (uint16_t)(UINT16_MAX * rw * rrw);
             g[i] = (uint16_t)(UINT16_MAX * gw * ggw);
             b[i] = (uint16_t)(UINT16_MAX * bw * bbw);
+            
             ++i;
         }
         ++j;
     }
-}    
-
+} 
 
 static void output_set_whitepoint(struct output *output, struct rgb *wp, double gamma) {
 	if (!output->enabled || output->gamma_control == NULL || output->table_fd == -1) {
 		return;
 	}
-    if ( what_cal != 0 && icfile == 1 ) {
+    if ( what_cal != 0 && icfile == 1 ) { // linear interpolation
+        fill_gamma_table1(output->table, output->ramp_size, wp->r, wp->g, wp->b);
+    } else if ( what_cal != 0 && icfile == 2 ) {
         fill_gamma_table2(output->table, output->ramp_size, wp->r, wp->g, wp->b);
     } else if (what_cal != 0) {
         fill_gamma_table(output->table, output->ramp_size, wp->r, wp->g, wp->b, gamma);
@@ -704,7 +779,7 @@ struct itimerspec set_struct2(void) {
 int set_timer2(struct itimerspec timerspec,int next_time) {
     timerspec.it_value.tv_sec = next_time;
     timer_settime(mytimer, TIMER_ABSTIME, &timerspec, NULL);
-    //printf("* Set timer next time: %s\n", ctime(&timerspec.it_value.tv_sec));
+    printf("* Set timer next time: %s\n", ctime(&timerspec.it_value.tv_sec));
     return 0;
 }
 
@@ -714,13 +789,17 @@ int time_to_today(int dd) {
     time_t rawtime;
     struct tm * timeinfo;
     int hour = 0, min = 0, sec = 0;
+    
+    /* get current timeinfo: */
     time ( &rawtime );
+    /* convert to struct: */
     timeinfo = localtime ( &rawtime );
     timeinfo->tm_mday   += dd;
-    timeinfo->tm_hour   = hour;
-    timeinfo->tm_min    = min;
-    timeinfo->tm_sec    = sec;
+    timeinfo->tm_hour   = hour;         //hours since midnight - [0,23]
+    timeinfo->tm_min    = min;          //minutes after the hour - [0,59]
+    timeinfo->tm_sec    = sec;          //seconds after the minute - [0,59]
 
+    ///* call mktime: create unix time stamp from timeinfo struct */
     int date = mktime ( timeinfo );
     return date;
 }
@@ -732,7 +811,6 @@ time_t date_time_today(void) {
 	time_t now_time = realtime.tv_sec;
     return now_time;
 }
-
 
 int f_time_to_add(int sunrise, int sunset, int dusk, int *time_to_add, int *what_cal) {
     // unix time until 00:00 of the day
@@ -782,10 +860,14 @@ int f_time_to_add(int sunrise, int sunset, int dusk, int *time_to_add, int *what
         *what_cal = 1;
     }
     
+    time_t next_time = *time_to_add;
+    printf("Next time is %s",ctime(&next_time));
     return 0;
 }
 
+
 static int wlrun(struct config cfg) {
+    
     struct context ctx = {
 		.sun = { 0,0,0,0 },
 		.condition = 3,
@@ -793,14 +875,14 @@ static int wlrun(struct config cfg) {
 		.config = cfg,
 	};
     
-    if (icfile == 1) {
+    if (icfile == 1 || icfile == 2) {
         int ret = get_data_array();
         if (ret == -1) {
             printf("Cannot read the file data_array.\n");
             icfile = 0;
         }
     }
-
+    
 	wl_list_init(&ctx.outputs);
 
 	if (setup_signals(&ctx) == -1) {
@@ -837,6 +919,7 @@ static int wlrun(struct config cfg) {
             set_timer2(timerspec,time_to_add);
         }
     }
+    
     int htemp = ctx.config.high_temp;
     int ltemp = ctx.config.low_temp;
     int dtemp = ctx.config.dusk_temp;
@@ -844,7 +927,7 @@ static int wlrun(struct config cfg) {
     if (what_cal == 1) { // now in sunrise time, next sunset
         if ( icfile == 0 && htemp != 6500) {
             temp = htemp;
-        } else if ( icfile == 1) {
+        } else if ( icfile == 1 || icfile == 2) {
             htemp = 6500;
             temp = htemp; // 6500 with -f option
         } else if (htemp == 6500) {
@@ -857,7 +940,8 @@ static int wlrun(struct config cfg) {
     } else {
         temp = ltemp;
     }
-    if (temp>0 && temp != 6500) {
+    
+    if (temp>0 && (temp != 6500||icfile)) {
         set_temperature(&ctx.outputs, temp, ctx.config.gamma);
         fprintf(stderr, "Temperature setted to: %d K\n", temp);
     }
@@ -868,7 +952,6 @@ static int wlrun(struct config cfg) {
     int temp_to_step;
     int step = 10;
     int temp_step = 0;
-    
     int time_to_remove = ctx.config.duration;
     int time_to_remove_step = (int)(time_to_remove/step);
     time_to_add = 0;
@@ -877,7 +960,7 @@ static int wlrun(struct config cfg) {
     if (what_cal == 1) { // now in sunrise time, next sunset
         if ( icfile == 0 && htemp != 6500) {
             temp = htemp;
-        } else if ( icfile == 1) {
+        } else if ( icfile == 1 || icfile == 2) {
             htemp = 6500;
             temp = htemp; // 6500 with -f option
         } else if (htemp == 6500) {
@@ -911,7 +994,7 @@ static int wlrun(struct config cfg) {
 			ctx.new_output = false;
 			//timer_fired = true; // maybe needed
 		}
-        
+
         if (timer_fired) {
 			timer_fired = false;
             
@@ -938,7 +1021,6 @@ static int wlrun(struct config cfg) {
                 time_to_remove = ctx.config.duration;
                 temp_step = (int)(temp_to_step/step);
             } else {
-                /*   */
                 struct itimerspec timerspec = set_struct2();
                 time_to_add += time_to_remove_step;
                 set_timer2(timerspec,time_to_add);
@@ -957,7 +1039,7 @@ static const char usage[] = "usage: %s [options]\n"
 "  -o <output>      name of output (display) to use,\n"
 "                   by default all outputs are used\n"
 "                   can be specified multiple times\n"
-"  -f 1             use the data in the data_array file as starting curve\n"
+"  -f <type>        use the data_array file as starting curve; type: 1 or 2\n"
 "  -T <temp>        set high temperature (default: 6500)\n"
 "  -t <temp>        set low temperature (default: 4500)\n"
 "  -m <temp>        set dusk temperature (default: 0 - not used)\n"
@@ -996,7 +1078,7 @@ int main(int argc, char *argv[]) {
                 break;
 			case 'T': // sunrise temp
 				config.high_temp = strtol(optarg, NULL, 10);
-                if (icfile == 1) {
+                if (icfile == 1 || icfile == 2) {
                     config.high_temp = 6500;
                 }
 				break;
@@ -1045,7 +1127,6 @@ int main(int argc, char *argv[]) {
 				config.gamma = strtod(optarg, NULL);
 				break;
             case 'i':
-                // iopt = strtol(optarg, NULL, 10);
                 mynot = optarg;
                 break;
             case 'v':
@@ -1059,7 +1140,7 @@ int main(int argc, char *argv[]) {
 				goto end;
 		}
 	}
-    if (icfile == 1) {
+    if (icfile == 1 || icfile == 2) {
         config.high_temp = 6500;
     }
 	if (config.high_temp <= config.low_temp) {

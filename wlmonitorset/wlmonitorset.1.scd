@@ -45,12 +45,14 @@ wlr-gamma-control-unstable-v1
 *-o* <output>
     Name of output (display) to use (default: all)."
 
-*-f 1* 
+*-f <type>*
+    1 linear interpolation (default); 2 previous behaviour.
     Use the data in the data_array file as starting curve,
     that becomes the default starting rgb values for the monitor.
-    The data_array file is a text file containing three rows per colour.
+    The data_array file is a text file containing three rows, one per colour,
+    newline terminated.
     Each row has 256 values, float numbers from 0.0 to 1.0.
-    When used, the next colour corrections will be applied on to this curve.
+    If used, the next colour corrections will be applied on to this curve.
     The gamma option has no effect with this option.
 
 
@@ -61,10 +63,7 @@ wlr-gamma-control-unstable-v1
 wlmonitorset -T 6500 -t 4000 -S 08:00 -s 18:00 
 ```
 
-Greater precision than one decimal place serves no purpose
-(https://xkcd.com/2170/) other than padding the command-line.
 
 # AUTHORS
 
 This work is from wlsunset, maintained by Kenny Levinsen
-(https://sr.ht/~kennylevinsen/wlsunset).
