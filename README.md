@@ -7,11 +7,11 @@ This work is from wlsunset.
 
 In development and testing stage.
 
-How to build and install:
+How to build:
 
 meson build
 ninja -C build
-sudo ninja -C build install
+
 
 wlsunset(1)
 
