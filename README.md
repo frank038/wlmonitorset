@@ -5,7 +5,7 @@ wlmonitorset
 Command line night light application for wlroots compositors.
 This work is from wlsunset.
 
-In testing stage.
+In development and testing stage.
 
 How to build and install:
 
@@ -62,15 +62,15 @@ The -f 1 option has priority over the -T option.
 *-o* <output>
     Name of output (display) to use (default: all)."
 
-*-f 1* 
+*-f <type>*
+    1 linear interpolation (default); 2 previous behaviour.
     Use the data in the data_array file as starting curve,
     that becomes the default starting rgb values for the monitor.
     The data_array file is a text file containing three rows, one per colour,
-    newline terminated per colour.
+    newline terminated.
     Each row has 256 values, float numbers from 0.0 to 1.0.
     If used, the next colour corrections will be applied on to this curve.
     The gamma option has no effect with this option.
-    (The curve(s) can be created following what is described in my create-icc program).
 
 
 # EXAMPLE
