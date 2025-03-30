@@ -13,6 +13,7 @@ meson build
 ninja -C build
 
 
+
 wlsunset(1)
 
 # NAME
