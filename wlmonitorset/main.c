@@ -19,7 +19,7 @@
 #include "wlr-gamma-control-unstable-v1-client-protocol.h"
 #include "str_vec.h"
 
-#define WLMONITORSET_VERSION "0.3"
+#define WLMONITORSET_VERSION "0.3.1"
 #define MAX_STRING (256*23)
 
 int set_timer2(struct itimerspec timerspec,int t);
@@ -421,7 +421,7 @@ static void fill_gamma_table1(uint16_t *table, uint32_t ramp_size, double rrw,
     }
     
     int j = 0; // total fields from data_array: 256 - 0 to 255
-    for (uint32_t i = a; i < ramp_size; i += 1024) {
+    for (uint32_t i = a; i < ramp_size; i += step_ramp_size) {
         // initial values of each step
         rw = atof(temp[0][j]);
         gw = atof(temp[1][j]);
