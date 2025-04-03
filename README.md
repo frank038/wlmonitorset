@@ -39,16 +39,16 @@ The -f 1 option has priority over the -T option.
 	Set low temperature (default: 4500).
 
 *-m* <temp>
-	Set very low temperture (default 0: not used).
+	Set very low temperture - opional (default 0: not used).
 
 *-S* <sunrise>
-	Manual time for sunrise as HH:MM (e.g. 06:30).
+	Manual time for sunrise as HH:MM (default 08:00).
 
 *-s* <sunset>
-	Manual time for sunset as HH:MM (e.g. 18:30).
+	Manual time for sunset as HH:MM (default 18:00).
 
 *-M* <long>
-	Manual time for dusk as HH:MM (e.g. 21:30).
+	Manual time for dusk as HH:MM - optional (e.g. 21:30).
 
 *-d* <duration>
 	Manual animation time in seconds (default 60).
@@ -64,7 +64,7 @@ The -f 1 option has priority over the -T option.
     Name of output (display) to use (default: all)."
 
 *-f <type>*
-    1 linear interpolation (default); 2 previous behaviour.
+    1 linear interpolation; 2 previous behaviour.
     Use the data in the data_array file as starting curve,
     that becomes the default starting rgb values for the monitor.
     The data_array file is a text file containing three rows, one per colour,
@@ -72,6 +72,12 @@ The -f 1 option has priority over the -T option.
     Each row has 256 values, float numbers from 0.0 to 1.0.
     If used, the next colour corrections will be applied on to this curve.
     The gamma option has no effect with this option.
+
+*-b <value>*
+    Set the brightness globally. From 0.3 to 1.0.
+
+*-B <value:value:value>*
+    Set the brightness for sunrise, sunset and dusk. From 0.3 to 1.0.
 
 
 # EXAMPLE
