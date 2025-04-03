@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <time.h>
@@ -19,7 +20,7 @@
 #include "wlr-gamma-control-unstable-v1-client-protocol.h"
 #include "str_vec.h"
 
-#define WLMONITORSET_VERSION "0.3.1"
+#define WLMONITORSET_VERSION "0.4"
 #define MAX_STRING (256*23)
 
 int set_timer2(struct itimerspec timerspec,int t);
@@ -29,14 +30,17 @@ int time_to_today(int d);
 time_t date_time_today(void);
 int f_time_to_add(int sunrise, int sunset, int dusk, int *t, int *d);
 int get_data_array(void);
+float rgbbright = 1.0;
+float sunrisebright = 1.0;
+float sunsetbright = 1.0;
+float duskbright = 1.0;
+int calculate_bright(char *s, float *bsunrise, float *bsunset, float *bdusk);
 
-int icfile = 0; // for icc like setting: 1 or 2 use it
+int icfile = 0; // for icc like setting: 1 or 2 or 3
 char myicfile[] = "data_array";
-//int iopt = 0; // whether to use notifications
-char *mynot; // whether to use notifications: program name
-
 
 char temp[3][256][22]; // 256 values per colour channel
+//float temp2[3][256]; // 256 values per colour channel
 int get_data_array(void) {
     
     FILE *fp = fopen("data_array","r");
@@ -58,6 +62,7 @@ int get_data_array(void) {
         ttemp = strtok(cc[i]," ");
         if (ttemp != NULL) {
             strcpy(temp[i][j],ttemp);
+            //temp2[i][j] = atof(ttemp);
         }
         ++j;
         while ( (ttemp = strtok(NULL," ")) != NULL ) {
@@ -65,6 +70,7 @@ int get_data_array(void) {
                 ttemp[strlen(ttemp)-1] = '\0';
             }
             strcpy(temp[i][j],ttemp);
+            //temp2[i][j] = atof(ttemp);
             ++j;
         }
     }
@@ -377,21 +383,21 @@ static const struct wl_registry_listener registry_listener = {
 
 
 static void fill_gamma_table(uint16_t *table, uint32_t ramp_size, double rw,
-		double gw, double bw, double gamma) {
+		double gw, double bw, double gamma, float now_bright) {
 	uint16_t *r = table;
 	uint16_t *g = table + ramp_size;
 	uint16_t *b = table + 2 * ramp_size;
 	for (uint32_t i = 0; i < ramp_size; ++i) {
 		double val = (double)i / (ramp_size - 1);
-		r[i] = (uint16_t)(UINT16_MAX * pow(val * rw, 1.0 / gamma));
-		g[i] = (uint16_t)(UINT16_MAX * pow(val * gw, 1.0 / gamma));
-		b[i] = (uint16_t)(UINT16_MAX * pow(val * bw, 1.0 / gamma));
+		r[i] = (uint16_t)(UINT16_MAX * pow(val * rw, 1.0 / gamma) * now_bright);
+		g[i] = (uint16_t)(UINT16_MAX * pow(val * gw, 1.0 / gamma) * now_bright);
+		b[i] = (uint16_t)(UINT16_MAX * pow(val * bw, 1.0 / gamma) * now_bright);
 	}
 }
 
 
 // linear interpolation
-static void fill_gamma_table1(uint16_t *table, uint32_t ramp_size, double rrw,
+static void fill_gamma_table0(uint16_t *table, uint32_t ramp_size, double rrw,
                             double ggw, double bbw) {
     uint16_t *r = table;
 	uint16_t *g = table + ramp_size;
@@ -454,7 +460,7 @@ static void fill_gamma_table1(uint16_t *table, uint32_t ramp_size, double rrw,
 
 
 // previous behaviour
-static void fill_gamma_table2(uint16_t *table, uint32_t ramp_size, double rrw,
+static void fill_gamma_table3(uint16_t *table, uint32_t ramp_size, double rrw,
                             double ggw, double bbw) {
     uint16_t *r = table;
 	uint16_t *g = table + ramp_size;
@@ -492,16 +498,16 @@ static void fill_gamma_table2(uint16_t *table, uint32_t ramp_size, double rrw,
     }
 } 
 
-static void output_set_whitepoint(struct output *output, struct rgb *wp, double gamma) {
+static void output_set_whitepoint(struct output *output, struct rgb *wp, double gamma, float now_bright) {
 	if (!output->enabled || output->gamma_control == NULL || output->table_fd == -1) {
 		return;
 	}
     if ( what_cal != 0 && icfile == 1 ) { // linear interpolation
-        fill_gamma_table1(output->table, output->ramp_size, wp->r, wp->g, wp->b);
-    } else if ( what_cal != 0 && icfile == 2 ) {
-        fill_gamma_table2(output->table, output->ramp_size, wp->r, wp->g, wp->b);
-    } else if (what_cal != 0) {
-        fill_gamma_table(output->table, output->ramp_size, wp->r, wp->g, wp->b, gamma);
+        fill_gamma_table0(output->table, output->ramp_size, wp->r, wp->g, wp->b);
+    } else if ( what_cal != 0 && icfile == 2 ) { // old method
+        fill_gamma_table3(output->table, output->ramp_size, wp->r, wp->g, wp->b);
+    } else if (what_cal != 0) { // no -f option
+        fill_gamma_table(output->table, output->ramp_size, wp->r, wp->g, wp->b, gamma, now_bright);
 	}
     lseek(output->table_fd, 0, SEEK_SET);
 	zwlr_gamma_control_v1_set_gamma(output->gamma_control,
@@ -628,15 +634,15 @@ struct rgb calc_whitepoint2(int temp) {
 
 
 timer_t mytimer;
-static void set_temperature(struct wl_list *outputs, int temp, double gamma) {
-	struct output *output;
+static void set_temperature(struct wl_list *outputs, int temp, double gamma, float now_bright) {
+    struct output *output;
     struct rgb wp = calc_whitepoint2(temp);
 	wl_list_for_each(output, outputs, link) {
 		if (output->gamma_control == NULL) {
 			setup_gamma_control(output->context, output);
 			continue;
 		}
-        output_set_whitepoint(output, &wp, gamma);
+        output_set_whitepoint(output, &wp, gamma, now_bright);
 	}
 }
 
@@ -768,6 +774,25 @@ static int parse_time_of_day(const char *s, time_t *time) {
 	return 0;
 }
 
+
+int calculate_bright(char *s, float *bsunrise, float *bsunset, float *bdusk) {
+    int i = 0;
+    char *ttemp;
+    if ((ttemp = strtok(s,":")) != NULL ) {
+        *bsunrise = strtof(ttemp, NULL);
+        ++i;
+    }
+    if ((ttemp = strtok(NULL,":")) != NULL ) {
+        *bsunset = strtof(ttemp, NULL);
+        ++i;
+    }
+    if ((ttemp = strtok(NULL,":")) != NULL ) {
+        *bdusk = strtof(ttemp, NULL);
+        ++i;
+    }
+    return i;
+}
+
 struct itimerspec set_struct2(void) {
     struct itimerspec timerspec;
     memset(&timerspec, 0, sizeof(struct itimerspec));
@@ -875,7 +900,7 @@ static int wlrun(struct config cfg) {
 		.config = cfg,
 	};
     
-    if (icfile == 1 || icfile == 2) {
+    if (icfile == 1 || icfile == 2 || icfile == 3 || icfile == 4) {
         int ret = get_data_array();
         if (ret == -1) {
             printf("Cannot read the file data_array.\n");
@@ -924,25 +949,31 @@ static int wlrun(struct config cfg) {
     int ltemp = ctx.config.low_temp;
     int dtemp = ctx.config.dusk_temp;
     int temp = 0;
+    float now_bright;
     if (what_cal == 1) { // now in sunrise time, next sunset
         if ( icfile == 0 && htemp != 6500) {
             temp = htemp;
-        } else if ( icfile == 1 || icfile == 2) {
+            now_bright = sunrisebright;
+        } else if ( icfile == 1 || icfile == 2 || icfile == 3 || icfile == 4) {
             htemp = 6500;
             temp = htemp; // 6500 with -f option
         } else if (htemp == 6500) {
             temp = htemp;
+            now_bright = sunrisebright;
         }
     } else if (what_cal == 2) { // now is sunset, next dusk or sunrise
         temp = ltemp;
+        now_bright = sunsetbright;
     } else if (what_cal == 3) { // now is dusk, next sunrise
         temp = dtemp;
+        now_bright = duskbright;
     } else {
         temp = ltemp;
+        now_bright = sunsetbright;
     }
     
     if (temp>0 && (temp != 6500||icfile)) {
-        set_temperature(&ctx.outputs, temp, ctx.config.gamma);
+        set_temperature(&ctx.outputs, temp, ctx.config.gamma, now_bright);
         fprintf(stderr, "Temperature setted to: %d K\n", temp);
     }
     
@@ -960,7 +991,7 @@ static int wlrun(struct config cfg) {
     if (what_cal == 1) { // now in sunrise time, next sunset
         if ( icfile == 0 && htemp != 6500) {
             temp = htemp;
-        } else if ( icfile == 1 || icfile == 2) {
+        } else if ( icfile == 1 || icfile == 2 || icfile == 3 || icfile == 4) {
             htemp = 6500;
             temp = htemp; // 6500 with -f option
         } else if (htemp == 6500) {
@@ -1025,7 +1056,14 @@ static int wlrun(struct config cfg) {
                 time_to_add += time_to_remove_step;
                 set_timer2(timerspec,time_to_add);
                 temp -= temp_step;
-                set_temperature(&ctx.outputs, temp, ctx.config.gamma);
+                if (what_cal == 1) {
+                    now_bright = sunrisebright;
+                } else if (what_cal == 2) {
+                    now_bright = sunsetbright;
+                } else if (what_cal == 3) {
+                    now_bright = duskbright;
+                }
+                set_temperature(&ctx.outputs, temp, ctx.config.gamma, now_bright);
                 time_to_remove -= time_to_remove_step;
             }
         }
@@ -1042,22 +1080,25 @@ static const char usage[] = "usage: %s [options]\n"
 "  -f <type>        use the data_array file as starting curve; type: 1 or 2\n"
 "  -T <temp>        set high temperature (default: 6500)\n"
 "  -t <temp>        set low temperature (default: 4500)\n"
-"  -m <temp>        set dusk temperature (default: 0 - not used)\n"
-"  -S <sunrise>     set manual sunrise (e.g. 06:30)\n"
-"  -s <sunset>      set manual sunset (e.g. 18:30)\n"
-"  -M <dusk>        set manual dusk (e.g. 23:30)\n"
+"  -m <temp>        set dusk temperature - optional (default: 0 - not used)\n"
+"  -S <sunrise>     set manual sunrise (default 08:00)\n"
+"  -s <sunset>      set manual sunset (default 18:00)\n"
+"  -M <dusk>        set manual dusk - optional (e.g. 23:30)\n"
 "  -d <duration>    set manual duration in seconds (default 60)\n"
-"  -g <gamma>       set gamma (default: 1.0); not with the -f option\n";
-
+"  -g <gamma>       set gamma (default: 1.0); not with the -f option\n\n"
+"  -a <brightness>  set the brightness globally: 0.3-1.0\n"
+"  -A <b:b:b:>      set the brightness for each period of the day: 0.3-1.0\n";
 
 int main(int argc, char *argv[]) {
 
 	struct config config = {
 		.high_temp = 6500,
 		.low_temp = 4500,
-        .dusk_temp = 4500,
+        .dusk_temp = 4000,
 		.gamma = 1.0,
         .duration = 60,
+        .sunrise = 28800,
+        .sunset = 64800,
 	};
 	str_vec_init(&config.output_names);
     
@@ -1067,8 +1108,9 @@ int main(int argc, char *argv[]) {
     int duration_time;
     int temp_sunset_time;
     int temp_dusk_time;
-    int temp_dusk_temp;
-	while ((opt = getopt(argc, argv, "hvo:t:m:T:l:L:S:M:s:d:g:f:i:")) != -1) {
+    //int temp_dusk_temp;
+    int aret = 0;
+	while ((opt = getopt(argc, argv, "hvo:t:m:T:l:L:S:M:s:d:g:f:b:B:")) != -1) {
 		switch (opt) {
 			case 'o': // output
 				str_vec_push(&config.output_names, optarg);
@@ -1078,7 +1120,7 @@ int main(int argc, char *argv[]) {
                 break;
 			case 'T': // sunrise temp
 				config.high_temp = strtol(optarg, NULL, 10);
-                if (icfile == 1 || icfile == 2) {
+                if (icfile == 1 || icfile == 2 || icfile == 3 || icfile == 4) {
                     config.high_temp = 6500;
                 }
 				break;
@@ -1086,9 +1128,10 @@ int main(int argc, char *argv[]) {
 				config.low_temp = strtol(optarg, NULL, 10);
 				break;
             case 'm': // dusk temp
-                temp_dusk_temp = strtol(optarg, NULL, 10);
-                if (temp_dusk_temp != config.low_temp)
-                    config.dusk_temp = temp_dusk_temp;
+                config.dusk_temp = strtol(optarg, NULL, 10);
+                //temp_dusk_temp = strtol(optarg, NULL, 10);
+                //if (temp_dusk_temp != config.low_temp)
+                    //config.dusk_temp = temp_dusk_temp;
 				break;
 			case 'S': // sunrise time
 				if (parse_time_of_day(optarg, &config.sunrise) != 0) {
@@ -1126,8 +1169,18 @@ int main(int argc, char *argv[]) {
 			case 'g':
 				config.gamma = strtod(optarg, NULL);
 				break;
-            case 'i':
-                mynot = optarg;
+            case 'b':
+                rgbbright = strtod(optarg, NULL);
+                sunrisebright = rgbbright;
+                sunsetbright = rgbbright;
+                duskbright = rgbbright;
+                break;
+            case 'B':
+                aret = calculate_bright(optarg, &sunrisebright, &sunsetbright, &duskbright);
+                if (aret != 3) {
+                    fprintf(stderr, "-A option: wrong values.\n");
+                    goto end;
+                }
                 break;
             case 'v':
 				printf("wlmonitorset version %s\n", WLMONITORSET_VERSION);
@@ -1140,18 +1193,21 @@ int main(int argc, char *argv[]) {
 				goto end;
 		}
 	}
-    if (icfile == 1 || icfile == 2) {
+    // forced
+    config.manual_time = true;
+    
+    if (icfile == 1 || icfile == 2 || icfile == 3 || icfile == 4) {
         config.high_temp = 6500;
     }
 	if (config.high_temp <= config.low_temp) {
-        fprintf(stderr, "Low temp (%d) must be lower than 6500\n", config.low_temp);
+        fprintf(stderr, "Low temp (%d) must be lower than high temp\n", config.low_temp);
 		goto end;
 	}
     if (config.high_temp <= config.dusk_temp) {
-        fprintf(stderr, "Dusk temp (%d) must be lower than 6500\n", config.dusk_temp);
+        fprintf(stderr, "Dusk temp (%d) must be lower than high temp\n", config.dusk_temp);
 		goto end;
 	}
-    if (config.low_temp < 1500) {
+    if (config.high_temp < 1500 || config.low_temp < 1500 || config.dusk_temp < 1500) {
         fprintf(stderr, "Temp (%d) must be higher than 1500\n", config.low_temp);
 		goto end;
 	}
@@ -1162,6 +1218,22 @@ int main(int argc, char *argv[]) {
     if (config.dusk && (config.sunset+config.duration) >= config.dusk) {
         fprintf(stderr, "Sunset time and/or duration wrong values: less than dusk.\n");
 		goto end;
+    }
+    if (rgbbright < 0.3 || rgbbright > 1.0) {
+        fprintf(stderr,"Brightness value out of range: %f instead of 0.0-1.0\n", rgbbright);
+        goto end;
+    }
+    if (sunrisebright < 0.3 || sunrisebright > 1.0) {
+        fprintf(stderr,"Sunrise brightness value out of range: %f instead of 0.0-1.0\n", sunrisebright);
+        goto end;
+    }
+    if (sunsetbright < 0.3 || sunsetbright > 1.0) {
+        fprintf(stderr,"Sunset brightness value out of range: %f instead of 0.0-1.0\n", sunsetbright);
+        goto end;
+    }
+    if (duskbright < 0.3 || duskbright > 1.0) {
+        fprintf(stderr,"Dusk brightness value out of range: %f instead of 0.0-1.0\n", duskbright);
+        goto end;
     }
 	ret = wlrun(config);
 end:
