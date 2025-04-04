@@ -957,6 +957,7 @@ static int wlrun(struct config cfg) {
         } else if ( icfile == 1 || icfile == 2 || icfile == 3 || icfile == 4) {
             htemp = 6500;
             temp = htemp; // 6500 with -f option
+            now_bright = 1.0;
         } else if (htemp == 6500) {
             temp = htemp;
             now_bright = sunrisebright;
@@ -969,7 +970,8 @@ static int wlrun(struct config cfg) {
         now_bright = duskbright;
     } else {
         temp = ltemp;
-        now_bright = sunsetbright;
+        //now_bright = sunsetbright;
+        now_bright = 1.0;
     }
     
     if (temp>0 && (temp != 6500||icfile)) {
