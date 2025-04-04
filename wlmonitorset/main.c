@@ -20,7 +20,7 @@
 #include "wlr-gamma-control-unstable-v1-client-protocol.h"
 #include "str_vec.h"
 
-#define WLMONITORSET_VERSION "0.4"
+#define WLMONITORSET_VERSION "0.5"
 #define MAX_STRING (256*23)
 
 int set_timer2(struct itimerspec timerspec,int t);
@@ -36,7 +36,7 @@ float sunsetbright = 1.0;
 float duskbright = 1.0;
 int calculate_bright(char *s, float *bsunrise, float *bsunset, float *bdusk);
 
-int icfile = 0; // for icc like setting: 1 or 2 or 3
+int icfile = 0; // for icc like setting: 1 or 2
 char myicfile[] = "data_array";
 
 char temp[3][256][22]; // 256 values per colour channel
@@ -80,46 +80,46 @@ int get_data_array(void) {
 int what_cal = 0; // 0 no
 
 struct config {
-	int high_temp;
-	int low_temp;
+    int high_temp;
+    int low_temp;
     int dusk_temp;
-	double gamma;
+    double gamma;
 
-	bool manual_time;
-	time_t sunrise;
-	time_t sunset;
+    bool manual_time;
+    time_t sunrise;
+    time_t sunset;
     time_t dusk;
-	time_t duration;
+    time_t duration;
 
-	struct str_vec output_names;
+    struct str_vec output_names;
 };
 
 enum state {
-	STATE_INITIAL,
-	STATE_NORMAL,
-	STATE_TRANSITION,
-	STATE_STATIC,
-	STATE_FORCED,
+    STATE_INITIAL,
+    STATE_NORMAL,
+    STATE_TRANSITION,
+    STATE_STATIC,
+    STATE_FORCED,
 };
 
 enum force_state {
-	FORCE_OFF,
-	FORCE_HIGH,
-	FORCE_LOW,
+    FORCE_OFF,
+    FORCE_HIGH,
+    FORCE_LOW,
 };
 
 struct sun {
-	time_t dawn;
-	time_t sunrise;
-	time_t sunset;
-	time_t dusk;
+    time_t dawn;
+    time_t sunrise;
+    time_t sunset;
+    time_t dusk;
 };
 
 enum sun_condition {
-	NORMAL,
-	MIDNIGHT_SUN,
-	POLAR_NIGHT,
-	SUN_CONDITION_LAST
+    NORMAL,
+    MIDNIGHT_SUN,
+    POLAR_NIGHT,
+    SUN_CONDITION_LAST
 };
 
 struct rgb {
@@ -127,281 +127,281 @@ struct rgb {
 };
 
 struct context {
-	struct config config;
-	struct sun sun;
+    struct config config;
+    struct sun sun;
 
-	enum state state;
-	enum sun_condition condition;
+    enum state state;
+    enum sun_condition condition;
 
-	time_t dawn_step_time;
-	time_t dusk_step_time;
-	time_t calc_day;
+    time_t dawn_step_time;
+    time_t dusk_step_time;
+    time_t calc_day;
 
-	bool new_output;
-	struct wl_list outputs;
-	timer_t timer;
+    bool new_output;
+    struct wl_list outputs;
+    timer_t timer;
 
-	enum force_state forced_state;
+    enum force_state forced_state;
 
-	struct zwlr_gamma_control_manager_v1 *gamma_control_manager;
+    struct zwlr_gamma_control_manager_v1 *gamma_control_manager;
 };
 
 struct output {
-	struct wl_list link;
+    struct wl_list link;
 
-	struct context *context;
-	struct wl_output *wl_output;
-	struct zwlr_gamma_control_v1 *gamma_control;
+    struct context *context;
+    struct wl_output *wl_output;
+    struct zwlr_gamma_control_v1 *gamma_control;
 
-	int table_fd;
-	uint32_t id;
-	uint32_t ramp_size;
-	uint16_t *table;
-	bool enabled;
-	char *name;
+    int table_fd;
+    uint32_t id;
+    uint32_t ramp_size;
+    uint16_t *table;
+    bool enabled;
+    char *name;
 };
 
 
 static int create_anonymous_file(off_t size) {
-	char template[] = "/tmp/wlsunset-shared-XXXXXX";
-	int fd = mkstemp(template);
-	if (fd < 0) {
-		return -1;
-	}
+    char template[] = "/tmp/wlsunset-shared-XXXXXX";
+    int fd = mkstemp(template);
+    if (fd < 0) {
+        return -1;
+    }
 
-	int ret;
-	do {
-		errno = 0;
-		ret = ftruncate(fd, size);
-	} while (errno == EINTR);
-	if (ret < 0) {
-		close(fd);
-		return -1;
-	}
+    int ret;
+    do {
+        errno = 0;
+        ret = ftruncate(fd, size);
+    } while (errno == EINTR);
+    if (ret < 0) {
+        close(fd);
+        return -1;
+    }
 
-	unlink(template);
-	return fd;
+    unlink(template);
+    return fd;
 }
 
 static int create_gamma_table(uint32_t ramp_size, uint16_t **table) {
-	size_t table_size = ramp_size * 3 * sizeof(uint16_t);
-	int fd = create_anonymous_file(table_size);
-	if (fd < 0) {
-		fprintf(stderr, "failed to create anonymous file\n");
-		return -1;
-	}
+    size_t table_size = ramp_size * 3 * sizeof(uint16_t);
+    int fd = create_anonymous_file(table_size);
+    if (fd < 0) {
+        fprintf(stderr, "failed to create anonymous file\n");
+        return -1;
+    }
 
-	void *data =
-		mmap(NULL, table_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	if (data == MAP_FAILED) {
-		fprintf(stderr, "failed to mmap()\n");
-		close(fd);
-		return -1;
-	}
+    void *data =
+        mmap(NULL, table_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (data == MAP_FAILED) {
+        fprintf(stderr, "failed to mmap()\n");
+        close(fd);
+        return -1;
+    }
 
-	*table = data;
-	return fd;
+    *table = data;
+    return fd;
 }
 
 static void gamma_control_handle_gamma_size(void *data,
-		struct zwlr_gamma_control_v1 *gamma_control, uint32_t ramp_size) {
-	(void)gamma_control;
-	struct output *output = data;
-	if (output->table_fd != -1) {
-		close(output->table_fd);
-		output->table_fd = -1;
-	}
-	output->ramp_size = ramp_size;
-	if (ramp_size == 0) {
-		// Maybe the output does not currently have a CRTC to tell us
-		// the gamma size, let's clean up and retry on next set.
-		zwlr_gamma_control_v1_destroy(output->gamma_control);
-		output->gamma_control = NULL;
-		return;
-	}
-	output->table_fd = create_gamma_table(ramp_size, &output->table);
-	output->context->new_output = true;
-	if (output->table_fd < 0) {
-		fprintf(stderr, "could not create gamma table for output %s (%d)\n",
-				output->name, output->id);
-		exit(EXIT_FAILURE);
-	}
+        struct zwlr_gamma_control_v1 *gamma_control, uint32_t ramp_size) {
+    (void)gamma_control;
+    struct output *output = data;
+    if (output->table_fd != -1) {
+        close(output->table_fd);
+        output->table_fd = -1;
+    }
+    output->ramp_size = ramp_size;
+    if (ramp_size == 0) {
+        // Maybe the output does not currently have a CRTC to tell us
+        // the gamma size, let's clean up and retry on next set.
+        zwlr_gamma_control_v1_destroy(output->gamma_control);
+        output->gamma_control = NULL;
+        return;
+    }
+    output->table_fd = create_gamma_table(ramp_size, &output->table);
+    output->context->new_output = true;
+    if (output->table_fd < 0) {
+        fprintf(stderr, "could not create gamma table for output %s (%d)\n",
+                output->name, output->id);
+        exit(EXIT_FAILURE);
+    }
 }
 
 static void gamma_control_handle_failed(void *data,
-		struct zwlr_gamma_control_v1 *gamma_control) {
-	(void)gamma_control;
-	struct output *output = data;
-	fprintf(stderr, "gamma control of output %s (%d) failed\n",
-			output->name, output->id);
-	zwlr_gamma_control_v1_destroy(output->gamma_control);
-	output->gamma_control = NULL;
-	if (output->table_fd != -1) {
-		close(output->table_fd);
-		output->table_fd = -1;
-	}
+        struct zwlr_gamma_control_v1 *gamma_control) {
+    (void)gamma_control;
+    struct output *output = data;
+    fprintf(stderr, "gamma control of output %s (%d) failed\n",
+            output->name, output->id);
+    zwlr_gamma_control_v1_destroy(output->gamma_control);
+    output->gamma_control = NULL;
+    if (output->table_fd != -1) {
+        close(output->table_fd);
+        output->table_fd = -1;
+    }
 }
 
 static const struct zwlr_gamma_control_v1_listener gamma_control_listener = {
-	.gamma_size = gamma_control_handle_gamma_size,
-	.failed = gamma_control_handle_failed,
+    .gamma_size = gamma_control_handle_gamma_size,
+    .failed = gamma_control_handle_failed,
 };
 
 static void setup_gamma_control(struct context *ctx, struct output *output) {
-	if (output->gamma_control != NULL) {
-		return;
-	}
-	if (ctx->gamma_control_manager == NULL) {
-		fprintf(stderr, "skipping setup of output %s (%d): gamma_control_manager missing\n",
-				output->name, output->id);
-		return;
-	}
-	output->gamma_control = zwlr_gamma_control_manager_v1_get_gamma_control(
-		ctx->gamma_control_manager, output->wl_output);
-	zwlr_gamma_control_v1_add_listener(output->gamma_control,
-		&gamma_control_listener, output);
+    if (output->gamma_control != NULL) {
+        return;
+    }
+    if (ctx->gamma_control_manager == NULL) {
+        fprintf(stderr, "skipping setup of output %s (%d): gamma_control_manager missing\n",
+                output->name, output->id);
+        return;
+    }
+    output->gamma_control = zwlr_gamma_control_manager_v1_get_gamma_control(
+        ctx->gamma_control_manager, output->wl_output);
+    zwlr_gamma_control_v1_add_listener(output->gamma_control,
+        &gamma_control_listener, output);
 }
 
 static void wl_output_handle_geometry(void *data, struct wl_output *output, int x, int y, int width,
-				      int height, int subpixel, const char *make, const char *model,
-				      int transform) {
-	(void)data, (void)output, (void)x, (void)y, (void)width, (void)height, (void)subpixel,
-		(void)make, (void)model, (void)transform;
+                      int height, int subpixel, const char *make, const char *model,
+                      int transform) {
+    (void)data, (void)output, (void)x, (void)y, (void)width, (void)height, (void)subpixel,
+        (void)make, (void)model, (void)transform;
 }
 
 static void wl_output_handle_mode(void *data, struct wl_output *output, uint32_t flags, int width,
-				  int height, int refresh) {
-	(void)data, (void)output, (void)flags, (void)width, (void)height, (void)refresh;
+                  int height, int refresh) {
+    (void)data, (void)output, (void)flags, (void)width, (void)height, (void)refresh;
 }
 
 static void wl_output_handle_done(void *data, struct wl_output *wl_output) {
-	(void)wl_output;
-	struct output *output = data;
-	setup_gamma_control(output->context, output);
+    (void)wl_output;
+    struct output *output = data;
+    setup_gamma_control(output->context, output);
 }
 
 static void wl_output_handle_scale(void *data, struct wl_output *output, int scale) {
-	(void)data, (void)output, (void)scale;
+    (void)data, (void)output, (void)scale;
 }
 
 static void wl_output_handle_name(void *data, struct wl_output *wl_output, const char *name) {
-	(void)wl_output;
-	struct output *output = data;
-	output->name = strdup(name);
-	struct config *cfg = &output->context->config;
-	for (size_t idx = 0; idx < cfg->output_names.len; ++idx) {
-		if (strcmp(output->name, cfg->output_names.data[idx]) == 0) {
-			fprintf(stderr, "enabling output %s by name\n", output->name);
-			output->enabled = true;
-			return;
-		}
-	}
+    (void)wl_output;
+    struct output *output = data;
+    output->name = strdup(name);
+    struct config *cfg = &output->context->config;
+    for (size_t idx = 0; idx < cfg->output_names.len; ++idx) {
+        if (strcmp(output->name, cfg->output_names.data[idx]) == 0) {
+            fprintf(stderr, "enabling output %s by name\n", output->name);
+            output->enabled = true;
+            return;
+        }
+    }
 }
 
 static void wl_output_handle_description(void *data, struct wl_output *wl_output, const char *description) {
-	(void)wl_output;
-	struct output *output = data;
-	struct config *cfg = &output->context->config;
-	for (size_t idx = 0; idx < cfg->output_names.len; ++idx) {
-		if (strcmp(description, cfg->output_names.data[idx]) == 0) {
-			fprintf(stderr, "enabling output %s by description\n", description);
-			output->enabled = true;
-			return;
-		}
-	}
+    (void)wl_output;
+    struct output *output = data;
+    struct config *cfg = &output->context->config;
+    for (size_t idx = 0; idx < cfg->output_names.len; ++idx) {
+        if (strcmp(description, cfg->output_names.data[idx]) == 0) {
+            fprintf(stderr, "enabling output %s by description\n", description);
+            output->enabled = true;
+            return;
+        }
+    }
 }
 
 struct wl_output_listener wl_output_listener = {
-	.geometry = wl_output_handle_geometry,
-	.mode = wl_output_handle_mode,
-	.done = wl_output_handle_done,
-	.scale = wl_output_handle_scale,
-	.name = wl_output_handle_name,
-	.description = wl_output_handle_description,
+    .geometry = wl_output_handle_geometry,
+    .mode = wl_output_handle_mode,
+    .done = wl_output_handle_done,
+    .scale = wl_output_handle_scale,
+    .name = wl_output_handle_name,
+    .description = wl_output_handle_description,
 };
 
 static void registry_handle_global(void *data, struct wl_registry *registry,
-		uint32_t name, const char *interface, uint32_t version) {
-	(void)version;
-	struct context *ctx = (struct context *)data;
-	if (strcmp(interface, wl_output_interface.name) == 0) {
-		fprintf(stderr, "registry: adding output %d\n", name);
+        uint32_t name, const char *interface, uint32_t version) {
+    (void)version;
+    struct context *ctx = (struct context *)data;
+    if (strcmp(interface, wl_output_interface.name) == 0) {
+        fprintf(stderr, "registry: adding output %d\n", name);
 
-		struct output *output = calloc(1, sizeof(struct output));
-		output->id = name;
-		output->table_fd = -1;
-		output->context = ctx;
+        struct output *output = calloc(1, sizeof(struct output));
+        output->id = name;
+        output->table_fd = -1;
+        output->context = ctx;
 
-		if (version >= WL_OUTPUT_NAME_SINCE_VERSION) {
-			output->enabled = ctx->config.output_names.len == 0;
-			output->wl_output = wl_registry_bind(registry, name,
-					&wl_output_interface, WL_OUTPUT_NAME_SINCE_VERSION);
-			wl_output_add_listener(output->wl_output, &wl_output_listener, output);
-		} else {
-			fprintf(stderr, "wl_output: old version (%d < %d), disabling name support\n",
-					version, WL_OUTPUT_NAME_SINCE_VERSION);
-			output->enabled = true;
-			output->wl_output = wl_registry_bind(registry, name,
-					&wl_output_interface, version);
-			setup_gamma_control(ctx, output);
-		}
+        if (version >= WL_OUTPUT_NAME_SINCE_VERSION) {
+            output->enabled = ctx->config.output_names.len == 0;
+            output->wl_output = wl_registry_bind(registry, name,
+                    &wl_output_interface, WL_OUTPUT_NAME_SINCE_VERSION);
+            wl_output_add_listener(output->wl_output, &wl_output_listener, output);
+        } else {
+            fprintf(stderr, "wl_output: old version (%d < %d), disabling name support\n",
+                    version, WL_OUTPUT_NAME_SINCE_VERSION);
+            output->enabled = true;
+            output->wl_output = wl_registry_bind(registry, name,
+                    &wl_output_interface, version);
+            setup_gamma_control(ctx, output);
+        }
 
-		wl_list_insert(&ctx->outputs, &output->link);
-	} else if (strcmp(interface,
-				zwlr_gamma_control_manager_v1_interface.name) == 0) {
-		ctx->gamma_control_manager = wl_registry_bind(registry, name,
-				&zwlr_gamma_control_manager_v1_interface, 1);
-	}
+        wl_list_insert(&ctx->outputs, &output->link);
+    } else if (strcmp(interface,
+                zwlr_gamma_control_manager_v1_interface.name) == 0) {
+        ctx->gamma_control_manager = wl_registry_bind(registry, name,
+                &zwlr_gamma_control_manager_v1_interface, 1);
+    }
 }
 
 static void registry_handle_global_remove(void *data,
-		struct wl_registry *registry, uint32_t name) {
-	(void)registry;
-	struct context *ctx = (struct context *)data;
-	struct output *output, *tmp;
-	wl_list_for_each_safe(output, tmp, &ctx->outputs, link) {
-		if (output->id == name) {
-			fprintf(stderr, "registry: removing output %s (%d)\n", output->name, name);
-			free(output->name);
-			wl_list_remove(&output->link);
-			if (output->gamma_control != NULL) {
-				zwlr_gamma_control_v1_destroy(output->gamma_control);
-			}
-			if (output->table_fd != -1) {
-				close(output->table_fd);
-			}
-			free(output);
-			break;
-		}
-	}
+        struct wl_registry *registry, uint32_t name) {
+    (void)registry;
+    struct context *ctx = (struct context *)data;
+    struct output *output, *tmp;
+    wl_list_for_each_safe(output, tmp, &ctx->outputs, link) {
+        if (output->id == name) {
+            fprintf(stderr, "registry: removing output %s (%d)\n", output->name, name);
+            free(output->name);
+            wl_list_remove(&output->link);
+            if (output->gamma_control != NULL) {
+                zwlr_gamma_control_v1_destroy(output->gamma_control);
+            }
+            if (output->table_fd != -1) {
+                close(output->table_fd);
+            }
+            free(output);
+            break;
+        }
+    }
 }
 
 static const struct wl_registry_listener registry_listener = {
-	.global = registry_handle_global,
-	.global_remove = registry_handle_global_remove,
+    .global = registry_handle_global,
+    .global_remove = registry_handle_global_remove,
 };
 
 
 static void fill_gamma_table(uint16_t *table, uint32_t ramp_size, double rw,
-		double gw, double bw, double gamma, float now_bright) {
-	uint16_t *r = table;
-	uint16_t *g = table + ramp_size;
-	uint16_t *b = table + 2 * ramp_size;
-	for (uint32_t i = 0; i < ramp_size; ++i) {
-		double val = (double)i / (ramp_size - 1);
-		r[i] = (uint16_t)(UINT16_MAX * pow(val * rw, 1.0 / gamma) * now_bright);
-		g[i] = (uint16_t)(UINT16_MAX * pow(val * gw, 1.0 / gamma) * now_bright);
-		b[i] = (uint16_t)(UINT16_MAX * pow(val * bw, 1.0 / gamma) * now_bright);
-	}
+        double gw, double bw, double gamma, float now_bright) {
+    uint16_t *r = table;
+    uint16_t *g = table + ramp_size;
+    uint16_t *b = table + 2 * ramp_size;
+    for (uint32_t i = 0; i < ramp_size; ++i) {
+        double val = (double)i / (ramp_size - 1);
+        r[i] = (uint16_t)(UINT16_MAX * pow(val * rw, 1.0 / gamma) * now_bright);
+        g[i] = (uint16_t)(UINT16_MAX * pow(val * gw, 1.0 / gamma) * now_bright);
+        b[i] = (uint16_t)(UINT16_MAX * pow(val * bw, 1.0 / gamma) * now_bright);
+    }
 }
 
 
 // linear interpolation
 static void fill_gamma_table0(uint16_t *table, uint32_t ramp_size, double rrw,
-                            double ggw, double bbw) {
+                            double ggw, double bbw, float now_bright) {
     uint16_t *r = table;
-	uint16_t *g = table + ramp_size;
-	uint16_t *b = table + 2 * ramp_size;
+    uint16_t *g = table + ramp_size;
+    uint16_t *b = table + 2 * ramp_size;
     
     int step_ramp_size = (ramp_size/256);
     int mod_ramp_size = (ramp_size%256);
@@ -421,9 +421,9 @@ static void fill_gamma_table0(uint16_t *table, uint32_t ramp_size, double rrw,
     int a;
     // spare values
     for (a=0;a<mod_ramp_size;++a) {
-        r[a] = (uint16_t)(UINT16_MAX * 0 * rrw);
-        g[a] = (uint16_t)(UINT16_MAX * 0 * ggw);
-        b[a] = (uint16_t)(UINT16_MAX * 0 * bbw);
+        r[a] = (uint16_t)(UINT16_MAX * 0 * rrw * now_bright);
+        g[a] = (uint16_t)(UINT16_MAX * 0 * ggw * now_bright);
+        b[a] = (uint16_t)(UINT16_MAX * 0 * bbw * now_bright);
     }
     
     int j = 0; // total fields from data_array: 256 - 0 to 255
@@ -450,9 +450,9 @@ static void fill_gamma_table0(uint16_t *table, uint32_t ramp_size, double rrw,
         
         for (int jj=0;jj<step_ramp_size;++jj) {
             // i is constant in this cicle while jj vary
-            r[i+jj] = (uint16_t)(UINT16_MAX * (rw+rwt*jj) * rrw);
-            g[i+jj] = (uint16_t)(UINT16_MAX * (gw+gwt*jj) * ggw);
-            b[i+jj] = (uint16_t)(UINT16_MAX * (bw+bwt*jj) * bbw);
+            r[i+jj] = (uint16_t)(UINT16_MAX * (rw+rwt*jj) * rrw * now_bright);
+            g[i+jj] = (uint16_t)(UINT16_MAX * (gw+gwt*jj) * ggw * now_bright);
+            b[i+jj] = (uint16_t)(UINT16_MAX * (bw+bwt*jj) * bbw * now_bright);
         }
         ++j;
     }
@@ -461,10 +461,10 @@ static void fill_gamma_table0(uint16_t *table, uint32_t ramp_size, double rrw,
 
 // previous behaviour
 static void fill_gamma_table3(uint16_t *table, uint32_t ramp_size, double rrw,
-                            double ggw, double bbw) {
+                            double ggw, double bbw, float now_bright) {
     uint16_t *r = table;
-	uint16_t *g = table + ramp_size;
-	uint16_t *b = table + 2 * ramp_size;
+    uint16_t *g = table + ramp_size;
+    uint16_t *b = table + 2 * ramp_size;
     
     int step_ramp_size = (ramp_size/256);
     int mod_ramp_size = (ramp_size%256);
@@ -475,9 +475,9 @@ static void fill_gamma_table3(uint16_t *table, uint32_t ramp_size, double rrw,
     
     int a;
     for (a=0;a<mod_ramp_size;a++) {
-        r[a] = (uint16_t)(UINT16_MAX * 0 * rrw);
-        g[a] = (uint16_t)(UINT16_MAX * 0 * ggw);
-        b[a] = (uint16_t)(UINT16_MAX * 0 * bbw);
+        r[a] = (uint16_t)(UINT16_MAX * 0 * rrw * now_bright);
+        g[a] = (uint16_t)(UINT16_MAX * 0 * ggw * now_bright);
+        b[a] = (uint16_t)(UINT16_MAX * 0 * bbw * now_bright);
     }
     
     int j = 0; // total fields: 256
@@ -488,9 +488,9 @@ static void fill_gamma_table3(uint16_t *table, uint32_t ramp_size, double rrw,
         
         for (int jj=0;jj<step_ramp_size;++jj) {
             
-            r[i] = (uint16_t)(UINT16_MAX * rw * rrw);
-            g[i] = (uint16_t)(UINT16_MAX * gw * ggw);
-            b[i] = (uint16_t)(UINT16_MAX * bw * bbw);
+            r[i] = (uint16_t)(UINT16_MAX * rw * rrw * now_bright);
+            g[i] = (uint16_t)(UINT16_MAX * gw * ggw * now_bright);
+            b[i] = (uint16_t)(UINT16_MAX * bw * bbw * now_bright);
             
             ++i;
         }
@@ -499,19 +499,19 @@ static void fill_gamma_table3(uint16_t *table, uint32_t ramp_size, double rrw,
 } 
 
 static void output_set_whitepoint(struct output *output, struct rgb *wp, double gamma, float now_bright) {
-	if (!output->enabled || output->gamma_control == NULL || output->table_fd == -1) {
-		return;
-	}
+    if (!output->enabled || output->gamma_control == NULL || output->table_fd == -1) {
+        return;
+    }
     if ( what_cal != 0 && icfile == 1 ) { // linear interpolation
-        fill_gamma_table0(output->table, output->ramp_size, wp->r, wp->g, wp->b);
+        fill_gamma_table0(output->table, output->ramp_size, wp->r, wp->g, wp->b, now_bright);
     } else if ( what_cal != 0 && icfile == 2 ) { // old method
-        fill_gamma_table3(output->table, output->ramp_size, wp->r, wp->g, wp->b);
+        fill_gamma_table3(output->table, output->ramp_size, wp->r, wp->g, wp->b, now_bright);
     } else if (what_cal != 0) { // no -f option
         fill_gamma_table(output->table, output->ramp_size, wp->r, wp->g, wp->b, gamma, now_bright);
-	}
+    }
     lseek(output->table_fd, 0, SEEK_SET);
-	zwlr_gamma_control_v1_set_gamma(output->gamma_control,
-			output->table_fd);
+    zwlr_gamma_control_v1_set_gamma(output->gamma_control,
+            output->table_fd);
 }
 
 float mytemp[7][3] = {
@@ -525,9 +525,9 @@ float mytemp[7][3] = {
     };
 
 struct rgb calc_whitepoint2(int temp) {
-	if (temp == 6500) {
-		return (struct rgb) {.r = 1.0, .g = 1.0, .b = 1.0};
-	} else if (temp == 5500) {
+    if (temp == 6500) {
+        return (struct rgb) {.r = 1.0, .g = 1.0, .b = 1.0};
+    } else if (temp == 5500) {
         return (struct rgb) {.r = mytemp[4][0], .g = mytemp[4][1], .b = mytemp[4][2]};
     } else if (temp == 4500) {
         return (struct rgb) {.r = mytemp[3][0], .g = mytemp[3][1], .b = mytemp[3][2]};
@@ -637,13 +637,13 @@ timer_t mytimer;
 static void set_temperature(struct wl_list *outputs, int temp, double gamma, float now_bright) {
     struct output *output;
     struct rgb wp = calc_whitepoint2(temp);
-	wl_list_for_each(output, outputs, link) {
-		if (output->gamma_control == NULL) {
-			setup_gamma_control(output->context, output);
-			continue;
-		}
+    wl_list_for_each(output, outputs, link) {
+        if (output->gamma_control == NULL) {
+            setup_gamma_control(output->context, output);
+            continue;
+        }
         output_set_whitepoint(output, &wp, gamma, now_bright);
-	}
+    }
 }
 
 static int timer_fired = 0;
@@ -651,127 +651,127 @@ static int usr1_fired = 0;
 static int signal_fds[2];
 
 static int display_dispatch(struct wl_display *display, int timeout) {
-	if (wl_display_prepare_read(display) == -1) {
-		return wl_display_dispatch_pending(display);
-	}
-	struct pollfd pfd[2];
-	pfd[0].fd = wl_display_get_fd(display);
-	pfd[1].fd = signal_fds[0];
+    if (wl_display_prepare_read(display) == -1) {
+        return wl_display_dispatch_pending(display);
+    }
+    struct pollfd pfd[2];
+    pfd[0].fd = wl_display_get_fd(display);
+    pfd[1].fd = signal_fds[0];
 
-	pfd[0].events = POLLOUT;
-	// If we hit EPIPE we might have hit a protocol error. Continue reading
-	// so that we can see what happened.
-	while (wl_display_flush(display) == -1 && errno != EPIPE) {
-		if (errno != EAGAIN) {
-			wl_display_cancel_read(display);
-			return -1;
-		}
-		// We only poll the wayland fd here
-		while (poll(pfd, 1, timeout) == -1) {
-			if (errno != EINTR) {
-				wl_display_cancel_read(display);
-				return -1;
-			}
-		}
-	}
-	pfd[0].events = POLLIN;
-	pfd[1].events = POLLIN;
-	while (poll(pfd, 2, timeout) == -1) {
-		if (errno != EINTR) {
-			wl_display_cancel_read(display);
-			return -1;
-		}
-	}
-	if (pfd[1].revents & POLLIN) {
-		// Empty signal fd
-		int signal;
-		int res = read(signal_fds[0], &signal, sizeof signal);
-		if (res == -1) {
-			if (errno != EAGAIN) {
-				return -1;
-			}
-		} else if (res != 4) {
-			fprintf(stderr, "could not read full signal ID\n");
-			return -1;
-		}
-		switch (signal) {
-		case SIGALRM:
-			timer_fired = true;
-			break;
-		case SIGUSR1:
-			// do something
-			usr1_fired = true;
-			break;
-		}
-	}
-	if ((pfd[0].revents & POLLIN) == 0) {
-		wl_display_cancel_read(display);
-		return 0;
-	}
+    pfd[0].events = POLLOUT;
+    // If we hit EPIPE we might have hit a protocol error. Continue reading
+    // so that we can see what happened.
+    while (wl_display_flush(display) == -1 && errno != EPIPE) {
+        if (errno != EAGAIN) {
+            wl_display_cancel_read(display);
+            return -1;
+        }
+        // We only poll the wayland fd here
+        while (poll(pfd, 1, timeout) == -1) {
+            if (errno != EINTR) {
+                wl_display_cancel_read(display);
+                return -1;
+            }
+        }
+    }
+    pfd[0].events = POLLIN;
+    pfd[1].events = POLLIN;
+    while (poll(pfd, 2, timeout) == -1) {
+        if (errno != EINTR) {
+            wl_display_cancel_read(display);
+            return -1;
+        }
+    }
+    if (pfd[1].revents & POLLIN) {
+        // Empty signal fd
+        int signal;
+        int res = read(signal_fds[0], &signal, sizeof signal);
+        if (res == -1) {
+            if (errno != EAGAIN) {
+                return -1;
+            }
+        } else if (res != 4) {
+            fprintf(stderr, "could not read full signal ID\n");
+            return -1;
+        }
+        switch (signal) {
+        case SIGALRM:
+            timer_fired = true;
+            break;
+        case SIGUSR1:
+            // do something
+            usr1_fired = true;
+            break;
+        }
+    }
+    if ((pfd[0].revents & POLLIN) == 0) {
+        wl_display_cancel_read(display);
+        return 0;
+    }
 
-	if (wl_display_read_events(display) == -1) {
-		return -1;
-	}
-	return wl_display_dispatch_pending(display);
+    if (wl_display_read_events(display) == -1) {
+        return -1;
+    }
+    return wl_display_dispatch_pending(display);
 }
 
 static void signal_handler(int signal) {
-	if (write(signal_fds[1], &signal, sizeof signal) == -1 && errno != EAGAIN) {
-		// This is unfortunate.
-	}
+    if (write(signal_fds[1], &signal, sizeof signal) == -1 && errno != EAGAIN) {
+        // This is unfortunate.
+    }
 }
 
 static int set_nonblock(int fd) {
-	int flags;
-	if ((flags = fcntl(fd, F_GETFL)) == -1 ||
-			fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
-		return -1;
-	}
-	return 0;
+    int flags;
+    if ((flags = fcntl(fd, F_GETFL)) == -1 ||
+            fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+        return -1;
+    }
+    return 0;
 }
 
 static int setup_signals(struct context *ctx) {
-	struct sigaction signal_action = {
-		.sa_handler = signal_handler,
-		.sa_flags = 0,
-	};
-	if (pipe(signal_fds) == -1) {
-		fprintf(stderr, "could not create signal pipe: %s\n",
-				strerror(errno));
-		return -1;
-	}
-	if (set_nonblock(signal_fds[0]) == -1 ||
-			set_nonblock(signal_fds[1]) == -1) {
-		fprintf(stderr, "could not set nonblock on signal pipe: %s\n",
-				strerror(errno));
-		return -1;
-	}
-	if (sigaction(SIGALRM, &signal_action, NULL) == -1) {
-		fprintf(stderr, "could not configure SIGALRM handler: %s\n",
-				strerror(errno));
-		return -1;
-	}
-	if (sigaction(SIGUSR1, &signal_action, NULL) == -1) {
-		fprintf(stderr, "could not configure SIGUSR1 handler: %s\n",
-				strerror(errno));
-		return -1;
-	}
-	if (timer_create(CLOCK_REALTIME, NULL, &ctx->timer) == -1) {
-		fprintf(stderr, "could not configure timer: %s\n",
-				strerror(errno));
-		return -1;
-	}
-	return 0;
+    struct sigaction signal_action = {
+        .sa_handler = signal_handler,
+        .sa_flags = 0,
+    };
+    if (pipe(signal_fds) == -1) {
+        fprintf(stderr, "could not create signal pipe: %s\n",
+                strerror(errno));
+        return -1;
+    }
+    if (set_nonblock(signal_fds[0]) == -1 ||
+            set_nonblock(signal_fds[1]) == -1) {
+        fprintf(stderr, "could not set nonblock on signal pipe: %s\n",
+                strerror(errno));
+        return -1;
+    }
+    if (sigaction(SIGALRM, &signal_action, NULL) == -1) {
+        fprintf(stderr, "could not configure SIGALRM handler: %s\n",
+                strerror(errno));
+        return -1;
+    }
+    if (sigaction(SIGUSR1, &signal_action, NULL) == -1) {
+        fprintf(stderr, "could not configure SIGUSR1 handler: %s\n",
+                strerror(errno));
+        return -1;
+    }
+    if (timer_create(CLOCK_REALTIME, NULL, &ctx->timer) == -1) {
+        fprintf(stderr, "could not configure timer: %s\n",
+                strerror(errno));
+        return -1;
+    }
+    return 0;
 }
 
 // HH and MM in unix time from 00:00 of the time; today ro tomorrow
 static int parse_time_of_day(const char *s, time_t *time) {
-	struct tm tm = { 0 };
-	if (strptime(s, "%H:%M", &tm) == NULL) {
-		return -1;
-	}
-	*time = tm.tm_hour * 3600 + tm.tm_min * 60;
-	return 0;
+    struct tm tm = { 0 };
+    if (strptime(s, "%H:%M", &tm) == NULL) {
+        return -1;
+    }
+    *time = tm.tm_hour * 3600 + tm.tm_min * 60;
+    return 0;
 }
 
 
@@ -804,7 +804,7 @@ struct itimerspec set_struct2(void) {
 int set_timer2(struct itimerspec timerspec,int next_time) {
     timerspec.it_value.tv_sec = next_time;
     timer_settime(mytimer, TIMER_ABSTIME, &timerspec, NULL);
-    printf("* Set timer next time: %s\n", ctime(&timerspec.it_value.tv_sec));
+    //printf("Set timer next time: %s\n", ctime(&timerspec.it_value.tv_sec));
     return 0;
 }
 
@@ -833,7 +833,7 @@ int time_to_today(int dd) {
 time_t date_time_today(void) {
     struct timespec realtime;
     clock_gettime(CLOCK_REALTIME, &realtime);
-	time_t now_time = realtime.tv_sec;
+    time_t now_time = realtime.tv_sec;
     return now_time;
 }
 
@@ -885,8 +885,8 @@ int f_time_to_add(int sunrise, int sunset, int dusk, int *time_to_add, int *what
         *what_cal = 1;
     }
     
-    time_t next_time = *time_to_add;
-    printf("Next time is %s",ctime(&next_time));
+    //time_t next_time = *time_to_add;
+    //printf("Next time is %s",ctime(&next_time));
     return 0;
 }
 
@@ -894,11 +894,11 @@ int f_time_to_add(int sunrise, int sunset, int dusk, int *time_to_add, int *what
 static int wlrun(struct config cfg) {
     
     struct context ctx = {
-		.sun = { 0,0,0,0 },
-		.condition = 3,
-		.state = STATE_INITIAL,
-		.config = cfg,
-	};
+        .sun = { 0,0,0,0 },
+        .condition = 3,
+        .state = STATE_INITIAL,
+        .config = cfg,
+    };
     
     if (icfile == 1 || icfile == 2 || icfile == 3 || icfile == 4) {
         int ret = get_data_array();
@@ -908,30 +908,30 @@ static int wlrun(struct config cfg) {
         }
     }
     
-	wl_list_init(&ctx.outputs);
+    wl_list_init(&ctx.outputs);
 
-	if (setup_signals(&ctx) == -1) {
-		return EXIT_FAILURE;
-	}
+    if (setup_signals(&ctx) == -1) {
+        return EXIT_FAILURE;
+    }
 
-	struct wl_display *display = wl_display_connect(NULL);
-	if (display == NULL) {
-		fprintf(stderr, "failed to create display\n");
-		return EXIT_FAILURE;
-	}
-	struct wl_registry *registry = wl_display_get_registry(display);
-	wl_registry_add_listener(registry, &registry_listener, &ctx);
-	wl_display_roundtrip(display);
+    struct wl_display *display = wl_display_connect(NULL);
+    if (display == NULL) {
+        fprintf(stderr, "failed to create display\n");
+        return EXIT_FAILURE;
+    }
+    struct wl_registry *registry = wl_display_get_registry(display);
+    wl_registry_add_listener(registry, &registry_listener, &ctx);
+    wl_display_roundtrip(display);
 
-	if (ctx.gamma_control_manager == NULL) {
-		fprintf(stderr, "compositor doesn't support wlr-gamma-control-unstable-v1\n");
-		return EXIT_FAILURE;
-	}
-	struct output *output;
-	wl_list_for_each(output, &ctx.outputs, link) {
-		setup_gamma_control(&ctx, output);
-	}
-	wl_display_roundtrip(display);
+    if (ctx.gamma_control_manager == NULL) {
+        fprintf(stderr, "compositor doesn't support wlr-gamma-control-unstable-v1\n");
+        return EXIT_FAILURE;
+    }
+    struct output *output;
+    wl_list_for_each(output, &ctx.outputs, link) {
+        setup_gamma_control(&ctx, output);
+    }
+    wl_display_roundtrip(display);
 
     int time_to_add = 0; // sunrise/sunset and unix_time_to_prev_midnight of today or of tomorrow
     
@@ -1020,14 +1020,14 @@ static int wlrun(struct config cfg) {
     time_to_remove = ctx.config.duration;
     time_to_remove_step = (int)(time_to_remove/step);
     
-	while (display_dispatch(display, -1) != -1) {
-		if (ctx.new_output) {
-			ctx.new_output = false;
-			//timer_fired = true; // maybe needed
-		}
+    while (display_dispatch(display, -1) != -1) {
+        if (ctx.new_output) {
+            ctx.new_output = false;
+            //timer_fired = true; // maybe needed
+        }
 
         if (timer_fired) {
-			timer_fired = false;
+            timer_fired = false;
             
             if (time_to_remove == 0) {
                 fprintf(stderr, "Temperature setted to: %d K\n", temp);
@@ -1068,7 +1068,7 @@ static int wlrun(struct config cfg) {
             }
         }
     }
-	return EXIT_SUCCESS;
+    return EXIT_SUCCESS;
 }
 
 static const char usage[] = "usage: %s [options]\n"
@@ -1085,90 +1085,86 @@ static const char usage[] = "usage: %s [options]\n"
 "  -s <sunset>      set manual sunset (default 18:00)\n"
 "  -M <dusk>        set manual dusk - optional (e.g. 23:30)\n"
 "  -d <duration>    set manual duration in seconds (default 60)\n"
-"  -g <gamma>       set gamma (default: 1.0); not with the -f option\n\n"
-"  -a <brightness>  set the brightness globally: 0.3-1.0\n"
-"  -A <b:b:b:>      set the brightness for each period of the day: 0.3-1.0\n";
+"  -g <gamma>       set gamma (default: 1.0); not with the -f option\n"
+"  -b <brightness>  set the brightness globally: 0.3-1.0\n"
+"  -B <b:b:b:>      set the brightness for each period of the day: 0.3-1.0\n";
 
 int main(int argc, char *argv[]) {
 
-	struct config config = {
-		.high_temp = 6500,
-		.low_temp = 4500,
+    struct config config = {
+        .high_temp = 6500,
+        .low_temp = 4500,
         .dusk_temp = 4000,
-		.gamma = 1.0,
+        .gamma = 1.0,
         .duration = 60,
         .sunrise = 28800,
         .sunset = 64800,
-	};
-	str_vec_init(&config.output_names);
+    };
+    str_vec_init(&config.output_names);
     
     
-	int ret = EXIT_FAILURE;
-	int opt;
+    int ret = EXIT_FAILURE;
+    int opt;
     int duration_time;
     int temp_sunset_time;
     int temp_dusk_time;
-    //int temp_dusk_temp;
     int aret = 0;
-	while ((opt = getopt(argc, argv, "hvo:t:m:T:l:L:S:M:s:d:g:f:b:B:")) != -1) {
-		switch (opt) {
-			case 'o': // output
-				str_vec_push(&config.output_names, optarg);
-				break;
+    while ((opt = getopt(argc, argv, "hvo:t:m:T:l:L:S:M:s:d:g:f:b:B:")) != -1) {
+        switch (opt) {
+            case 'o': // output
+                str_vec_push(&config.output_names, optarg);
+                break;
             case 'f':
                 icfile = strtol(optarg, NULL, 10);
                 break;
-			case 'T': // sunrise temp
-				config.high_temp = strtol(optarg, NULL, 10);
+            case 'T': // sunrise temp
+                config.high_temp = strtol(optarg, NULL, 10);
                 if (icfile == 1 || icfile == 2 || icfile == 3 || icfile == 4) {
                     config.high_temp = 6500;
                 }
-				break;
+                break;
             case 't': // sunrise temp
-				config.low_temp = strtol(optarg, NULL, 10);
-				break;
+                config.low_temp = strtol(optarg, NULL, 10);
+                break;
             case 'm': // dusk temp
                 config.dusk_temp = strtol(optarg, NULL, 10);
-                //temp_dusk_temp = strtol(optarg, NULL, 10);
-                //if (temp_dusk_temp != config.low_temp)
-                    //config.dusk_temp = temp_dusk_temp;
-				break;
-			case 'S': // sunrise time
-				if (parse_time_of_day(optarg, &config.sunrise) != 0) {
-					fprintf(stderr, "invalid time, expected HH:MM, got %s\n", optarg);
-					goto end;
-				}
-				config.manual_time = true;
-				break;
+                break;
+            case 'S': // sunrise time
+                if (parse_time_of_day(optarg, &config.sunrise) != 0) {
+                    fprintf(stderr, "invalid time, expected HH:MM, got %s\n", optarg);
+                    goto end;
+                }
+                config.manual_time = true;
+                break;
             case 's': // sunset time
                 temp_sunset_time = parse_time_of_day(optarg, &config.sunset);
-				if (temp_sunset_time != 0) {
-					fprintf(stderr, "invalid time, expected HH:MM, got %s\n", optarg);
-					goto end;
-				}
+                if (temp_sunset_time != 0) {
+                    fprintf(stderr, "invalid time, expected HH:MM, got %s\n", optarg);
+                    goto end;
+                }
                 if (config.sunset < config.sunrise) { // next day
                     config.sunset += (24*60*60);
                 }
-				config.manual_time = true;
-				break;
+                config.manual_time = true;
+                break;
             case 'M': // dusk time
                 temp_dusk_time = parse_time_of_day(optarg, &config.dusk);
-				if ( temp_dusk_time != 0) {
-					fprintf(stderr, "invalid time, expected HH:MM, got %s\n", optarg);
-					goto end;
-				}
+                if ( temp_dusk_time != 0) {
+                    fprintf(stderr, "invalid time, expected HH:MM, got %s\n", optarg);
+                    goto end;
+                }
                 if (config.dusk < config.sunset) { // next day
                     config.dusk += (24*60*60);
                 }
-				config.manual_time = true;
-				break;
-			case 'd':
+                config.manual_time = true;
+                break;
+            case 'd':
                 duration_time = strtol(optarg, NULL, 10);
                 config.duration = (duration_time > 60) ? duration_time : 60;
-				break;
-			case 'g':
-				config.gamma = strtod(optarg, NULL);
-				break;
+                break;
+            case 'g':
+                config.gamma = strtod(optarg, NULL);
+                break;
             case 'b':
                 rgbbright = strtod(optarg, NULL);
                 sunrisebright = rgbbright;
@@ -1178,65 +1174,69 @@ int main(int argc, char *argv[]) {
             case 'B':
                 aret = calculate_bright(optarg, &sunrisebright, &sunsetbright, &duskbright);
                 if (aret != 3) {
-                    fprintf(stderr, "-A option: wrong values.\n");
+                    fprintf(stderr, "-B option: wrong values.\n");
                     goto end;
                 }
                 break;
             case 'v':
-				printf("wlmonitorset version %s\n", WLMONITORSET_VERSION);
-				ret = EXIT_SUCCESS;
-				goto end;
-			case 'h':
-				ret = EXIT_SUCCESS;
-			default:
-				fprintf(stderr, usage, argv[0]);
-				goto end;
-		}
-	}
+                printf("wlmonitorset version %s\n", WLMONITORSET_VERSION);
+                ret = EXIT_SUCCESS;
+                goto end;
+            case 'h':
+                ret = EXIT_SUCCESS;
+            default:
+                fprintf(stderr, usage, argv[0]);
+                goto end;
+        }
+    }
     // forced
     config.manual_time = true;
     
     if (icfile == 1 || icfile == 2 || icfile == 3 || icfile == 4) {
         config.high_temp = 6500;
     }
-	if (config.high_temp <= config.low_temp) {
-        fprintf(stderr, "Low temp (%d) must be lower than high temp\n", config.low_temp);
-		goto end;
-	}
-    if (config.high_temp <= config.dusk_temp) {
-        fprintf(stderr, "Dusk temp (%d) must be lower than high temp\n", config.dusk_temp);
-		goto end;
-	}
+    //if (config.high_temp <= config.low_temp) {
+        //fprintf(stderr, "Low temp (%d) must be lower than high temp\n", config.low_temp);
+        //goto end;
+    //}
+    //if (config.high_temp <= config.dusk_temp) {
+        //fprintf(stderr, "Dusk temp (%d) must be lower than high temp\n", config.dusk_temp);
+        //goto end;
+    //}
     if (config.high_temp < 1500 || config.low_temp < 1500 || config.dusk_temp < 1500) {
-        fprintf(stderr, "Temp (%d) must be higher than 1500\n", config.low_temp);
-		goto end;
-	}
+        fprintf(stderr, "Temp (%d) must be higher than or equal to 1500\n", config.low_temp);
+        goto end;
+    }
+    if (config.high_temp > 9000 || config.low_temp > 9000 || config.dusk_temp > 9000) {
+        fprintf(stderr, "Temp (%d) must be lower than or equal to 9000\n", config.low_temp);
+        goto end;
+    }
     if (config.sunset && (config.sunrise+config.duration) >= config.sunset) {
         fprintf(stderr, "Sunrise time and/or duration wrong values: less than sunset.\n");
-		goto end;
+        goto end;
     }
     if (config.dusk && (config.sunset+config.duration) >= config.dusk) {
         fprintf(stderr, "Sunset time and/or duration wrong values: less than dusk.\n");
-		goto end;
+        goto end;
     }
     if (rgbbright < 0.3 || rgbbright > 1.0) {
-        fprintf(stderr,"Brightness value out of range: %f instead of 0.0-1.0\n", rgbbright);
+        fprintf(stderr,"Brightness value out of range: %f instead of 0.3-1.0\n", rgbbright);
         goto end;
     }
     if (sunrisebright < 0.3 || sunrisebright > 1.0) {
-        fprintf(stderr,"Sunrise brightness value out of range: %f instead of 0.0-1.0\n", sunrisebright);
+        fprintf(stderr,"Sunrise brightness value out of range: %f instead of 0.3-1.0\n", sunrisebright);
         goto end;
     }
     if (sunsetbright < 0.3 || sunsetbright > 1.0) {
-        fprintf(stderr,"Sunset brightness value out of range: %f instead of 0.0-1.0\n", sunsetbright);
+        fprintf(stderr,"Sunset brightness value out of range: %f instead of 0.3-1.0\n", sunsetbright);
         goto end;
     }
     if (duskbright < 0.3 || duskbright > 1.0) {
-        fprintf(stderr,"Dusk brightness value out of range: %f instead of 0.0-1.0\n", duskbright);
+        fprintf(stderr,"Dusk brightness value out of range: %f instead of 0.3-1.0\n", duskbright);
         goto end;
     }
-	ret = wlrun(config);
+    ret = wlrun(config);
 end:
-	str_vec_free(&config.output_names);
-	return ret;
+    str_vec_free(&config.output_names);
+    return ret;
 }
