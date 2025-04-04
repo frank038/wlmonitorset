@@ -1089,7 +1089,7 @@ static const char usage[] = "usage: %s [options]\n"
 "  -b <brightness>  set the brightness globally: 0.3-1.0\n"
 "                   do not use with the -f option, use -B instead\n"
 "  -B <b:b:b:>      set the brightness for each period of the day: 0.3-1.0\n"
-"                   if used with the -f opion, make sure to use 1.0:b:b\n";
+"                   if used with the -f option, make sure to use 1.0:b:b\n";
 
 int main(int argc, char *argv[]) {
 
