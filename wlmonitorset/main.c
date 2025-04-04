@@ -957,7 +957,6 @@ static int wlrun(struct config cfg) {
         } else if ( icfile == 1 || icfile == 2 || icfile == 3 || icfile == 4) {
             htemp = 6500;
             temp = htemp; // 6500 with -f option
-            now_bright = 1.0;
         } else if (htemp == 6500) {
             temp = htemp;
             now_bright = sunrisebright;
@@ -970,8 +969,7 @@ static int wlrun(struct config cfg) {
         now_bright = duskbright;
     } else {
         temp = ltemp;
-        //now_bright = sunsetbright;
-        now_bright = 1.0;
+        now_bright = sunsetbright;
     }
     
     if (temp>0 && (temp != 6500||icfile)) {
@@ -1089,7 +1087,9 @@ static const char usage[] = "usage: %s [options]\n"
 "  -d <duration>    set manual duration in seconds (default 60)\n"
 "  -g <gamma>       set gamma (default: 1.0); not with the -f option\n"
 "  -b <brightness>  set the brightness globally: 0.3-1.0\n"
-"  -B <b:b:b:>      set the brightness for each period of the day: 0.3-1.0\n";
+"                   do not use with the -f option, use -B instead\n"
+"  -B <b:b:b:>      set the brightness for each period of the day: 0.3-1.0\n"
+"                   if used with the -f opion, make sure to use 1.0:b:b\n";
 
 int main(int argc, char *argv[]) {
 
