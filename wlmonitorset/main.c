@@ -43,9 +43,29 @@ char temp[3][256][22]; // 256 values per colour channel
 //float temp2[3][256]; // 256 values per colour channel
 int get_data_array(void) {
     
-    FILE *fp = fopen("data_array","r");
-    if (fp == NULL) {
-        return -1;
+    char *data_array_file_config = strcat(getenv("HOME"), "/.config/wlmonitorset/data_array");
+    char cwd[1024];
+    char *data_array_file;
+    FILE *fp;
+    
+    if (access(data_array_file_config, R_OK) == 0) {
+        fp = fopen(data_array_file_config,"r");
+        if (fp == NULL) {
+            return -1;
+        }
+    } else {
+        if (getcwd(cwd, sizeof(cwd)) == NULL) {
+            perror("cwd error()");
+            return -1;
+        } else {
+            data_array_file = strcat(cwd, "/data_array");
+            if (access(data_array_file, R_OK) == 0) {
+                fp = fopen(data_array_file,"r");
+            }
+            if (fp == NULL) {
+                return -1;
+            }
+        }
     }
     
     char cc[3][MAX_STRING];
@@ -1103,7 +1123,6 @@ int main(int argc, char *argv[]) {
         .sunset = 64800,
     };
     str_vec_init(&config.output_names);
-    
     
     int ret = EXIT_FAILURE;
     int opt;
