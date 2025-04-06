@@ -45,6 +45,7 @@ int get_data_array(void) {
     
     char *data_array_file_config = strcat(getenv("HOME"), "/.config/wlmonitorset/data_array");
     char cwd[1024];
+    
     char *data_array_file;
     FILE *fp;
     
@@ -954,7 +955,7 @@ static int wlrun(struct config cfg) {
     wl_display_roundtrip(display);
 
     int time_to_add = 0; // sunrise/sunset and unix_time_to_prev_midnight of today or of tomorrow
-    
+    time_t next_time;
     if (ctx.config.manual_time) {
         // calculate the next time change, when this program starts up
         f_time_to_add(ctx.config.sunrise,ctx.config.sunset,ctx.config.dusk,&time_to_add,&what_cal);
@@ -962,6 +963,8 @@ static int wlrun(struct config cfg) {
         if (ctx.config.sunset && ctx.config.sunrise) {
             struct itimerspec timerspec = set_struct2();
             set_timer2(timerspec,time_to_add);
+            timerspec.it_value.tv_sec = time_to_add;
+            next_time = timerspec.it_value.tv_sec;
         }
     }
     
@@ -977,6 +980,7 @@ static int wlrun(struct config cfg) {
         } else if ( icfile == 1 || icfile == 2 || icfile == 3 || icfile == 4) {
             htemp = 6500;
             temp = htemp; // 6500 with -f option
+            now_bright = sunrisebright;
         } else if (htemp == 6500) {
             temp = htemp;
             now_bright = sunrisebright;
@@ -995,7 +999,13 @@ static int wlrun(struct config cfg) {
     if (temp>0 && (temp != 6500||icfile)) {
         set_temperature(&ctx.outputs, temp, ctx.config.gamma, now_bright);
         fprintf(stderr, "Temperature setted to: %d K\n", temp);
+        //if (icfile) {
+            //fprintf(stderr, "Temperature setted to curve\n");
+        //} else {
+            //fprintf(stderr, "Temperature setted to: %d K\n", temp);
+        //}
     }
+    printf("Set timer next time: %s\n", ctime(&next_time));
     
     int htemp2 = ctx.config.high_temp;
     int ltemp2 = ctx.config.low_temp;
@@ -1040,23 +1050,33 @@ static int wlrun(struct config cfg) {
     time_to_remove = ctx.config.duration;
     time_to_remove_step = (int)(time_to_remove/step);
     
+    now_bright = 0.0;
+    double prev_bright = 1.0;
+    double now_step = 0.0;
     while (display_dispatch(display, -1) != -1) {
         if (ctx.new_output) {
             ctx.new_output = false;
             //timer_fired = true; // maybe needed
         }
-
+        
         if (timer_fired) {
             timer_fired = false;
             
             if (time_to_remove == 0) {
                 fprintf(stderr, "Temperature setted to: %d K\n", temp);
+                //if (icfile) {
+                    //fprintf(stderr, "Temperature setted to curve\n");
+                //} else {
+                    //fprintf(stderr, "Temperature setted to: %d K\n", temp);
+                //}
                 // reset
                 time_to_add = 0; // sunrise/sunset and unix_time_to_prev_midnight of today or of tomorrow
                 what_cal = 0; // 0 reset
                 f_time_to_add(ctx.config.sunrise,ctx.config.sunset,ctx.config.dusk,&time_to_add,&what_cal);
                 struct itimerspec timerspec = set_struct2();
                 set_timer2(timerspec,time_to_add);
+                timerspec.it_value.tv_sec = time_to_add;
+                printf("Set timer next time: %s\n", ctime(&timerspec.it_value.tv_sec));
                 /*  next time data calculations  */
                 if (what_cal == 1) {
                     temp_to_step = (htemp2-ltemp2);
@@ -1071,19 +1091,25 @@ static int wlrun(struct config cfg) {
                 }
                 time_to_remove = ctx.config.duration;
                 temp_step = (int)(temp_to_step/step);
+                now_bright = 0.0;
+                now_step = 0.0;
             } else {
                 struct itimerspec timerspec = set_struct2();
                 time_to_add += time_to_remove_step;
                 set_timer2(timerspec,time_to_add);
                 temp -= temp_step;
                 if (what_cal == 1) {
-                    now_bright = sunrisebright;
-                } else if (what_cal == 2) {
+                    prev_bright = sunrisebright;
                     now_bright = sunsetbright;
-                } else if (what_cal == 3) {
+                } else if (what_cal == 2) {
+                    prev_bright = sunsetbright;
                     now_bright = duskbright;
+                } else if (what_cal == 3) {
+                    prev_bright = duskbright;
+                    now_bright = sunrisebright;
                 }
-                set_temperature(&ctx.outputs, temp, ctx.config.gamma, now_bright);
+                now_step += 1;
+                set_temperature(&ctx.outputs, temp, ctx.config.gamma, (prev_bright - (double)((prev_bright-now_bright)/step)*now_step) );
                 time_to_remove -= time_to_remove_step;
             }
         }
