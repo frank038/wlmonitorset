@@ -79,6 +79,10 @@ The -f 1 option has priority over the -T option.
 *-B <value:value:value>*
     Set the brightness for sunrise, sunset and dusk. From 0.3 to 1.0.
 
+The value 6500 is the neutral value, no colours corrections.
+The data_array file can be placed in HOME/.config/wlmonitorset folder
+or in this program folder.
+
 
 # EXAMPLE
 
