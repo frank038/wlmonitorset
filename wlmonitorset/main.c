@@ -20,7 +20,7 @@
 #include "wlr-gamma-control-unstable-v1-client-protocol.h"
 #include "str_vec.h"
 
-#define WLMONITORSET_VERSION "0.5"
+#define WLMONITORSET_VERSION "0.6"
 #define MAX_STRING (256*23)
 
 int set_timer2(struct itimerspec timerspec,int t);
@@ -30,17 +30,20 @@ int time_to_today(int d);
 time_t date_time_today(void);
 int f_time_to_add(int sunrise, int sunset, int dusk, int *t, int *d);
 int get_data_array(void);
+int get_data_array2(void);
 float rgbbright = 1.0;
 float sunrisebright = 1.0;
 float sunsetbright = 1.0;
 float duskbright = 1.0;
 int calculate_bright(char *s, float *bsunrise, float *bsunset, float *bdusk);
+int step = 10; // temperature transition steps
 
 int icfile = 0; // for icc like setting: 1 or 2
-char myicfile[] = "data_array";
+//char myicfile[] = "data_array";
+//char myicfile2[] = "data_array2";
+int to_sunset_step = 0; // needed by fill_gamma_table2
 
-char temp[3][256][22]; // 256 values per colour channel
-//float temp2[3][256]; // 256 values per colour channel
+float temp1[3][256]; // 256 values per colour channel
 int get_data_array(void) {
     
     char *data_array_file_config = strcat(getenv("HOME"), "/.config/wlmonitorset/data_array");
@@ -56,7 +59,7 @@ int get_data_array(void) {
         }
     } else {
         if (getcwd(cwd, sizeof(cwd)) == NULL) {
-            perror("cwd error()");
+            perror("cwd error");
             return -1;
         } else {
             data_array_file = strcat(cwd, "/data_array");
@@ -82,21 +85,76 @@ int get_data_array(void) {
         int j = 0;
         ttemp = strtok(cc[i]," ");
         if (ttemp != NULL) {
-            strcpy(temp[i][j],ttemp);
-            //temp2[i][j] = atof(ttemp);
+            temp1[i][j] = atof(ttemp);
         }
         ++j;
         while ( (ttemp = strtok(NULL," ")) != NULL ) {
             if ( ttemp[strlen(ttemp)-1] == '\n' ) {
                 ttemp[strlen(ttemp)-1] = '\0';
             }
-            strcpy(temp[i][j],ttemp);
-            //temp2[i][j] = atof(ttemp);
+            temp1[i][j] = atof(ttemp);
             ++j;
         }
     }
     return 0;
 }
+
+float temp2[3][256]; // 256 values per colour channel
+int get_data_array2(void) {
+    
+    char *data_array_file_config = strcat(getenv("HOME"), "/.config/wlmonitorset/data_array2");
+    char cwd[1024];
+    
+    char *data_array_file;
+    FILE *fp;
+    
+    if (access(data_array_file_config, R_OK) == 0) {
+        fp = fopen(data_array_file_config,"r");
+        if (fp == NULL) {
+            return -1;
+        }
+    } else {
+        if (getcwd(cwd, sizeof(cwd)) == NULL) {
+            perror("cwd error");
+            return -1;
+        } else {
+            data_array_file = strcat(cwd, "/data_array2");
+            if (access(data_array_file, R_OK) == 0) {
+                fp = fopen(data_array_file,"r");
+            }
+            if (fp == NULL) {
+                return -1;
+            }
+        }
+    }
+    
+    char cc[3][MAX_STRING];
+    int ii = 0;
+    while ( (fgets(cc[ii],MAX_STRING,fp) != NULL) ) {
+        ++ii;
+    }
+    
+    fclose(fp);
+    
+    char *ttemp;
+    for (int i=0;i<3;++i) {
+        int j = 0;
+        ttemp = strtok(cc[i]," ");
+        if (ttemp != NULL) {
+            temp2[i][j] = atof(ttemp);
+        }
+        ++j;
+        while ( (ttemp = strtok(NULL," ")) != NULL ) {
+            if ( ttemp[strlen(ttemp)-1] == '\n' ) {
+                ttemp[strlen(ttemp)-1] = '\0';
+            }
+            temp2[i][j] = atof(ttemp);
+            ++j;
+        }
+    }
+    return 0;
+}
+
 
 int what_cal = 0; // 0 no
 
@@ -418,6 +476,8 @@ static void fill_gamma_table(uint16_t *table, uint32_t ramp_size, double rw,
 
 
 // linear interpolation
+// one curve
+// at sunrise
 static void fill_gamma_table0(uint16_t *table, uint32_t ramp_size, double rrw,
                             double ggw, double bbw, float now_bright) {
     uint16_t *r = table;
@@ -450,15 +510,15 @@ static void fill_gamma_table0(uint16_t *table, uint32_t ramp_size, double rrw,
     int j = 0; // total fields from data_array: 256 - 0 to 255
     for (uint32_t i = a; i < ramp_size; i += step_ramp_size) {
         // initial values of each step
-        rw = atof(temp[0][j]);
-        gw = atof(temp[1][j]);
-        bw = atof(temp[2][j]);
+        rw = temp1[0][j];
+        gw = temp1[1][j];
+        bw = temp1[2][j];
         
         if (j < 255) {
             // next data in data_array
-            rw2 = atof(temp[0][j+1]);
-            gw2 = atof(temp[1][j+1]);
-            bw2 = atof(temp[2][j+1]);
+            rw2 = temp1[0][j+1];
+            gw2 = temp1[1][j+1];
+            bw2 = temp1[2][j+1];
             // interpolation (for the whole lenght of the step)
             rwt = (rw2-rw)/step_ramp_size;
             gwt = (gw2-gw)/step_ramp_size;
@@ -477,16 +537,18 @@ static void fill_gamma_table0(uint16_t *table, uint32_t ramp_size, double rrw,
         }
         ++j;
     }
-} 
+}
 
 
-// previous behaviour
-static void fill_gamma_table3(uint16_t *table, uint32_t ramp_size, double rrw,
+// linear interpolation
+// two curves
+// at sunset
+static void fill_gamma_table2(uint16_t *table, uint32_t ramp_size, double rrw,
                             double ggw, double bbw, float now_bright) {
     uint16_t *r = table;
     uint16_t *g = table + ramp_size;
     uint16_t *b = table + 2 * ramp_size;
-    
+
     int step_ramp_size = (ramp_size/256);
     int mod_ramp_size = (ramp_size%256);
     
@@ -494,39 +556,135 @@ static void fill_gamma_table3(uint16_t *table, uint32_t ramp_size, double rrw,
     float gw = 0.0;
     float bw = 0.0;
     
+    float rw2 = 0.0;
+    float gw2 = 0.0;
+    float bw2 = 0.0;
+    
+    float rwt = 0.0;
+    float gwt = 0.0;
+    float bwt = 0.0;
+    
+    // needed to pass from curve 1 to curve 2
+    //if (what_cal == 2) {
+    float rw_a = 0.0;
+    float gw_a = 0.0;
+    float bw_a = 0.0;
+    float rw2_a = 0.0;
+    float gw2_a = 0.0;
+    float bw2_a = 0.0;
+    float rw_diff = 0.0;
+    float gw_diff = 0.0;
+    float bw_diff = 0.0;
+    float rw2_diff = 0.0;
+    float gw2_diff = 0.0;
+    float bw2_diff = 0.0;
+    //}
+    
     int a;
-    for (a=0;a<mod_ramp_size;a++) {
+        for (a=0;a<mod_ramp_size;++a) {
         r[a] = (uint16_t)(UINT16_MAX * 0 * rrw * now_bright);
         g[a] = (uint16_t)(UINT16_MAX * 0 * ggw * now_bright);
         b[a] = (uint16_t)(UINT16_MAX * 0 * bbw * now_bright);
     }
     
-    int j = 0; // total fields: 256
-    for (uint32_t i = a; i < ramp_size; ) {
-        rw = atof(temp[0][j]);
-        gw = atof(temp[1][j]);
-        bw = atof(temp[2][j]);
-        
-        for (int jj=0;jj<step_ramp_size;++jj) {
+    int j = 0; // total fields from data_array: 256 - 0 to 255
+    for (uint32_t i = a; i < ramp_size; i += step_ramp_size) {
+        if (what_cal == 2) { // to sunset
+            // initial values of each step
+            // from curve 2
+            rw = temp2[0][j];
+            gw = temp2[1][j];
+            bw = temp2[2][j];
+            // from curve 1
+            rw_a = temp1[0][j];
+            gw_a = temp1[1][j];
+            bw_a = temp1[2][j];
+            // diff
+            rw_diff = (rw-rw_a)/step*to_sunset_step;
+            gw_diff = (gw-gw_a)/step*to_sunset_step;
+            bw_diff = (bw-bw_a)/step*to_sunset_step;
             
-            r[i] = (uint16_t)(UINT16_MAX * rw * rrw * now_bright);
-            g[i] = (uint16_t)(UINT16_MAX * gw * ggw * now_bright);
-            b[i] = (uint16_t)(UINT16_MAX * bw * bbw * now_bright);
+            if (j < 255) {
+                // next data in data_array files
+                // from curve 2
+                rw2 = temp2[0][j+1];
+                gw2 = temp2[1][j+1];
+                bw2 = temp2[2][j+1];
+                // from curve 1
+                rw2_a = temp1[0][j+1];
+                gw2_a = temp1[1][j+1];
+                bw2_a = temp1[2][j+1];
+                // diff
+                rw2_diff = (rw2-rw2_a)/step*to_sunset_step;
+                gw2_diff = (gw2-gw2_a)/step*to_sunset_step;
+                bw2_diff = (bw2-bw2_a)/step*to_sunset_step;
+                // interpolation
+                rwt = (rw2+rw2_diff-rw-rw_diff)/step_ramp_size;
+                gwt = (gw2+gw2_diff-gw-gw_diff)/step_ramp_size;
+                bwt = (bw2+bw2_diff-bw-bw_diff)/step_ramp_size;
+                
+            } else if (j == 255) {
+                rw_diff = 0.0;
+                gw_diff = 0.0;
+                bw_diff = 0.0;
+                rw2_diff = 0.0;
+                gw2_diff = 0.0;
+                bw2_diff = 0.0;
+                rwt = 0.0;
+                gwt = 0.0;
+                bwt = 0.0;
+            }
+            for (int jj=0;jj<step_ramp_size;++jj) {
+                // i is constant in this cicle while jj vary
+                r[i+jj] = (uint16_t)(UINT16_MAX * (rw+rwt*jj) * rrw);
+                g[i+jj] = (uint16_t)(UINT16_MAX * (gw+gwt*jj) * ggw);
+                b[i+jj] = (uint16_t)(UINT16_MAX * (bw+bwt*jj) * bbw);
+            }
+            ++j;
             
-            ++i;
+        } else if (what_cal == 3) { // to dusk
+            // initial values of each step
+            rw = temp2[0][j];
+            gw = temp2[1][j];
+            bw = temp2[2][j];
+            
+            if (j < 255) {
+                // next data in data_array
+                rw2 = temp2[0][j+1];
+                gw2 = temp2[1][j+1];
+                bw2 = temp2[2][j+1];
+                // interpolation (for the whole lenght of the step)
+                rwt = (rw2-rw)/step_ramp_size;
+                gwt = (gw2-gw)/step_ramp_size;
+                bwt = (bw2-bw)/step_ramp_size;
+            } else if (j == 255) {
+                rwt = 0.0;
+                gwt = 0.0;
+                bwt = 0.0;
+            }
+            
+            for (int jj=0;jj<step_ramp_size;++jj) {
+                // i is constant in this cicle while jj vary
+                r[i+jj] = (uint16_t)(UINT16_MAX * (rw+rwt*jj) * rrw * now_bright);
+                g[i+jj] = (uint16_t)(UINT16_MAX * (gw+gwt*jj) * ggw * now_bright);
+                b[i+jj] = (uint16_t)(UINT16_MAX * (bw+bwt*jj) * bbw * now_bright);
+            }
+            ++j;
         }
-        ++j;
     }
-} 
+}
+
 
 static void output_set_whitepoint(struct output *output, struct rgb *wp, double gamma, float now_bright) {
     if (!output->enabled || output->gamma_control == NULL || output->table_fd == -1) {
         return;
     }
-    if ( what_cal != 0 && icfile == 1 ) { // linear interpolation
+    // sunrise only with one curve or two curves and dusk with one curve
+    if ( (icfile == 1 && what_cal != 0) || (icfile == 2 && what_cal == 1) ) { // linear interpolation
         fill_gamma_table0(output->table, output->ramp_size, wp->r, wp->g, wp->b, now_bright);
-    } else if ( what_cal != 0 && icfile == 2 ) { // old method
-        fill_gamma_table3(output->table, output->ramp_size, wp->r, wp->g, wp->b, now_bright);
+    // sunset and dusk with two curves
+    } else if ( icfile == 2 && what_cal > 1 ) { // two curves - linear interpolation
+        fill_gamma_table2(output->table, output->ramp_size, wp->r, wp->g, wp->b, now_bright);
     } else if (what_cal != 0) { // no -f option
         fill_gamma_table(output->table, output->ramp_size, wp->r, wp->g, wp->b, gamma, now_bright);
     }
@@ -825,7 +983,6 @@ struct itimerspec set_struct2(void) {
 int set_timer2(struct itimerspec timerspec,int next_time) {
     timerspec.it_value.tv_sec = next_time;
     timer_settime(mytimer, TIMER_ABSTIME, &timerspec, NULL);
-    //printf("Set timer next time: %s\n", ctime(&timerspec.it_value.tv_sec));
     return 0;
 }
 
@@ -861,53 +1018,38 @@ time_t date_time_today(void) {
 int f_time_to_add(int sunrise, int sunset, int dusk, int *time_to_add, int *what_cal) {
     // unix time until 00:00 of the day
     int unix_time_to_prev_midnight = time_to_today(0);
-    const int time_of_the_day = (24*60*60); // 86400
+    const int time_of_day = (24*60*60); // 86400
     time_t now_time = date_time_today();
     // check and set the day and time for the next colour setting
-    int c_r = sunrise;
-    int c_s = sunset;
+    int c_r = sunrise+unix_time_to_prev_midnight;
+    int c_s = sunset+unix_time_to_prev_midnight;
     int c_d = dusk;
-    
-    if (c_d > 0 && c_d > time_of_the_day) { // tomorrow
-        if (now_time > unix_time_to_prev_midnight+c_s && c_s < time_of_the_day) { // today
-            *time_to_add = unix_time_to_prev_midnight+c_d;
-            // now is sunset
-            *what_cal = 2;
-        } else { // today
-            *time_to_add = unix_time_to_prev_midnight+c_s;
-            // now is sunrise
-            *what_cal = 1;
-        }
-    } else if (c_d > 0) { // today
-        if (now_time > unix_time_to_prev_midnight+c_d) {
-            *time_to_add = unix_time_to_prev_midnight+c_r+(24*60*60); // tomorrow
-            // now is dusk
-            *what_cal = 3;
-        } else if (now_time > unix_time_to_prev_midnight+c_s) {
-            *time_to_add = unix_time_to_prev_midnight+c_d;
-            // now is sunset
-            *what_cal = 2;
-        } else {
-            *time_to_add = unix_time_to_prev_midnight+c_s;
-            // now is sunrise
-            *what_cal = 1;
-        }
-    } else if (now_time > unix_time_to_prev_midnight+c_s) {
-        if (c_d > 0) {
-            *time_to_add = unix_time_to_prev_midnight+c_d;
-        } else {
-            *time_to_add = unix_time_to_prev_midnight+c_r+(24*60*60); // tomorrow
-        }
-        // now is sunset
-        *what_cal = 2;
-    } else {
-        *time_to_add = unix_time_to_prev_midnight+c_s;
-        // now is sunrise
-        *what_cal = 1;
+    if (dusk > 0) {
+        c_d += unix_time_to_prev_midnight;
     }
     
+    if (c_d == 0) {
+        if (now_time >= c_r && now_time < c_s) { // now is sunrise
+            *what_cal = 1;
+            *time_to_add = c_s; // next is sunset
+        } else if (now_time >= c_s) { // now is sunset
+            *what_cal = 2;
+            *time_to_add = c_r+time_of_day; // tomorrow is sunrise
+        }
+    } else if (c_d > 0) {
+        if (now_time >= c_r && now_time < c_s) { // now is sunrise
+            *what_cal = 1;
+            *time_to_add = c_s; // next is sunset
+        } else if (now_time >= c_s && now_time < c_d) {
+            *what_cal = 2;
+            *time_to_add = c_d; // next is sunrise
+        } else if (now_time >= c_d) {
+            *what_cal = 3;
+            *time_to_add = c_r+time_of_day; // next is dusk
+        }
+    }
     //time_t next_time = *time_to_add;
-    //printf("Next time is %s",ctime(&next_time));
+    //printf("** Next time is %s\n\n\n",ctime(&next_time));
     return 0;
 }
 
@@ -926,6 +1068,13 @@ static int wlrun(struct config cfg) {
         if (ret == -1) {
             printf("Cannot read the file data_array.\n");
             icfile = 0;
+        }
+    }
+    if (icfile == 2) {
+        int ret = get_data_array2();
+        if (ret == -1) {
+            printf("Cannot read the file data_array2.\n");
+            icfile = 1;
         }
     }
     
@@ -974,7 +1123,7 @@ static int wlrun(struct config cfg) {
     int temp = 0;
     float now_bright;
     if (what_cal == 1) { // now in sunrise time, next sunset
-        if ( icfile == 0 && htemp != 6500) {
+        if (icfile == 0 && htemp != 6500) {
             temp = htemp;
             now_bright = sunrisebright;
         } else if ( icfile == 1 || icfile == 2 || icfile == 3 || icfile == 4) {
@@ -986,32 +1135,39 @@ static int wlrun(struct config cfg) {
             now_bright = sunrisebright;
         }
     } else if (what_cal == 2) { // now is sunset, next dusk or sunrise
-        temp = ltemp;
-        now_bright = sunsetbright;
+        if (icfile == 2) {
+            ltemp = 6500;
+            temp = ltemp; // 6500 with -f option
+            now_bright = sunsetbright;
+        } else {
+            temp = ltemp;
+            now_bright = sunsetbright;
+        }
     } else if (what_cal == 3) { // now is dusk, next sunrise
         temp = dtemp;
         now_bright = duskbright;
-    } else {
-        temp = ltemp;
-        now_bright = sunsetbright;
+    //} else {
+        //temp = ltemp;
+        //now_bright = sunsetbright;
     }
     
     if (temp>0 && (temp != 6500||icfile)) {
         set_temperature(&ctx.outputs, temp, ctx.config.gamma, now_bright);
-        fprintf(stderr, "Temperature setted to: %d K\n", temp);
-        //if (icfile) {
-            //fprintf(stderr, "Temperature setted to curve\n");
-        //} else {
-            //fprintf(stderr, "Temperature setted to: %d K\n", temp);
-        //}
+        //fprintf(stderr, "Temperature setted to: %d K\n", temp);
+        if (icfile && what_cal == 1) {
+            fprintf(stderr, "Temperature setted to sunrise curve\n");
+        } else if (icfile == 2 && what_cal == 2) {
+            fprintf(stderr, "Temperature setted to sunset curve\n");
+        } else {
+            fprintf(stderr, "Temperature setted to: %d K\n", temp);
+        }
     }
-    printf("Set timer next time: %s\n", ctime(&next_time));
+    printf("Next change at: %s\n", ctime(&next_time));
     
     int htemp2 = ctx.config.high_temp;
     int ltemp2 = ctx.config.low_temp;
     int dtemp2 = ctx.config.dusk_temp;
     int temp_to_step;
-    int step = 10;
     int temp_step = 0;
     int time_to_remove = ctx.config.duration;
     int time_to_remove_step = (int)(time_to_remove/step);
@@ -1019,7 +1175,7 @@ static int wlrun(struct config cfg) {
     f_time_to_add(ctx.config.sunrise,ctx.config.sunset,ctx.config.dusk,&time_to_add,&what_cal);
     
     if (what_cal == 1) { // now in sunrise time, next sunset
-        if ( icfile == 0 && htemp != 6500) {
+        if (icfile == 0 && htemp != 6500) {
             temp = htemp;
         } else if ( icfile == 1 || icfile == 2 || icfile == 3 || icfile == 4) {
             htemp = 6500;
@@ -1028,11 +1184,16 @@ static int wlrun(struct config cfg) {
             temp = htemp;
         }
     } else if (what_cal == 2) { // now is sunset, next dusk or sunrise
-        temp = ltemp;
+        if (icfile == 2) {
+            ltemp = 6500;
+            temp = ltemp;
+        } else {
+            temp = ltemp;
+        }
     } else if (what_cal == 3) { // now is dusk, next sunrise
         temp = dtemp;
-    } else {
-        temp = ltemp;
+    //} else {
+        //temp = ltemp;
     }
     
     if (what_cal == 1) {
@@ -1053,6 +1214,7 @@ static int wlrun(struct config cfg) {
     now_bright = 0.0;
     double prev_bright = 1.0;
     double now_step = 0.0;
+    int prev_what_cal = what_cal;
     while (display_dispatch(display, -1) != -1) {
         if (ctx.new_output) {
             ctx.new_output = false;
@@ -1063,20 +1225,17 @@ static int wlrun(struct config cfg) {
             timer_fired = false;
             
             if (time_to_remove == 0) {
-                fprintf(stderr, "Temperature setted to: %d K\n", temp);
-                //if (icfile) {
-                    //fprintf(stderr, "Temperature setted to curve\n");
-                //} else {
-                    //fprintf(stderr, "Temperature setted to: %d K\n", temp);
-                //}
+                //fprintf(stderr, "Temperature setted to: %d K\n", temp);
                 // reset
                 time_to_add = 0; // sunrise/sunset and unix_time_to_prev_midnight of today or of tomorrow
                 what_cal = 0; // 0 reset
+                to_sunset_step = 0; // 0 reset
+                // calculate time and what_cal
                 f_time_to_add(ctx.config.sunrise,ctx.config.sunset,ctx.config.dusk,&time_to_add,&what_cal);
                 struct itimerspec timerspec = set_struct2();
                 set_timer2(timerspec,time_to_add);
                 timerspec.it_value.tv_sec = time_to_add;
-                printf("Set timer next time: %s\n", ctime(&timerspec.it_value.tv_sec));
+                printf("Next change at: %s\n", ctime(&timerspec.it_value.tv_sec));
                 /*  next time data calculations  */
                 if (what_cal == 1) {
                     temp_to_step = (htemp2-ltemp2);
@@ -1093,21 +1252,40 @@ static int wlrun(struct config cfg) {
                 temp_step = (int)(temp_to_step/step);
                 now_bright = 0.0;
                 now_step = 0.0;
+                if (icfile && what_cal == 1) {
+                    fprintf(stderr, "Temperature setted to sunrise curve\n");
+                } else if (icfile == 2 && what_cal == 2) {
+                    fprintf(stderr, "Temperature setted to sunset curve\n");
+                } else {
+                    fprintf(stderr, "Temperature setted to: %d K\n", temp);
+                }
             } else {
                 struct itimerspec timerspec = set_struct2();
                 time_to_add += time_to_remove_step;
                 set_timer2(timerspec,time_to_add);
                 temp -= temp_step;
-                if (what_cal == 1) {
+                if (prev_what_cal == 1) {
                     prev_bright = sunrisebright;
                     now_bright = sunsetbright;
-                } else if (what_cal == 2) {
+                    what_cal = 2;
+                } else if (prev_what_cal == 2) {
                     prev_bright = sunsetbright;
                     now_bright = duskbright;
-                } else if (what_cal == 3) {
+                    if (ctx.config.dusk_temp > 0) {
+                        what_cal = 3;
+                    } else {
+                        what_cal = 1;
+                    }
+                } else if (prev_what_cal == 3) {
                     prev_bright = duskbright;
                     now_bright = sunrisebright;
+                    what_cal = 1;
                 }
+                if (what_cal == 2 && icfile == 2) {
+                    temp = 6500;
+                }
+                // icfile is 2
+                to_sunset_step += 1;
                 now_step += 1;
                 set_temperature(&ctx.outputs, temp, ctx.config.gamma, (prev_bright - (double)((prev_bright-now_bright)/step)*now_step) );
                 time_to_remove -= time_to_remove_step;
@@ -1123,7 +1301,8 @@ static const char usage[] = "usage: %s [options]\n"
 "  -o <output>      name of output (display) to use,\n"
 "                   by default all outputs are used\n"
 "                   can be specified multiple times\n"
-"  -f <type>        use the data_array file as starting curve; type: 1 or 2\n"
+"  -f <type>        use the data_array files as colour curves:\n"
+"                   type: 1 for sunrise only or 2 with sunset (do not work)\n"
 "  -T <temp>        set high temperature (default: 6500)\n"
 "  -t <temp>        set low temperature (default: 4500)\n"
 "  -m <temp>        set dusk temperature - optional (default: 0 - not used)\n"
@@ -1134,15 +1313,17 @@ static const char usage[] = "usage: %s [options]\n"
 "  -g <gamma>       set gamma (default: 1.0); not with the -f option\n"
 "  -b <brightness>  set the brightness globally: 0.3-1.0\n"
 "                   do not use with the -f option, use -B instead\n"
+"                   to preserve the curves\n"
 "  -B <b:b:b:>      set the brightness for each period of the day: 0.3-1.0\n"
-"                   if used with the -f option, make sure to use 1.0:b:b\n";
+"                   if used with the -f option, use 1.0:b:b or 1.0:1.0:b\n"
+"                   to preserve the curves\n";
 
 int main(int argc, char *argv[]) {
 
     struct config config = {
         .high_temp = 6500,
         .low_temp = 4500,
-        .dusk_temp = 4000,
+        .dusk_temp = 0,
         .gamma = 1.0,
         .duration = 60,
         .sunrise = 28800,
@@ -1166,9 +1347,6 @@ int main(int argc, char *argv[]) {
                 break;
             case 'T': // sunrise temp
                 config.high_temp = strtol(optarg, NULL, 10);
-                if (icfile == 1 || icfile == 2 || icfile == 3 || icfile == 4) {
-                    config.high_temp = 6500;
-                }
                 break;
             case 't': // sunrise temp
                 config.low_temp = strtol(optarg, NULL, 10);
@@ -1239,8 +1417,15 @@ int main(int argc, char *argv[]) {
     // forced
     config.manual_time = true;
     
-    if (icfile == 1 || icfile == 2 || icfile == 3 || icfile == 4) {
+    if (icfile == 1) {
         config.high_temp = 6500;
+    }
+    if (icfile == 2) {
+        config.low_temp = 6500;
+    }
+    if (config.dusk && config.dusk_temp == 0) {
+        fprintf(stderr, "Dusk temperature not setted, -M option removed\n");
+        config.dusk = 0;
     }
     //if (config.high_temp <= config.low_temp) {
         //fprintf(stderr, "Low temp (%d) must be lower than high temp\n", config.low_temp);
@@ -1250,11 +1435,11 @@ int main(int argc, char *argv[]) {
         //fprintf(stderr, "Dusk temp (%d) must be lower than high temp\n", config.dusk_temp);
         //goto end;
     //}
-    if (config.high_temp < 1500 || config.low_temp < 1500 || config.dusk_temp < 1500) {
+    if (config.high_temp < 1500 || config.low_temp < 1500 || (config.dusk_temp != 0 && config.dusk_temp < 1500)) {
         fprintf(stderr, "Temp (%d) must be higher than or equal to 1500\n", config.low_temp);
         goto end;
     }
-    if (config.high_temp > 9000 || config.low_temp > 9000 || config.dusk_temp > 9000) {
+    if (config.high_temp > 9000 || config.low_temp > 9000 || (config.dusk_temp != 0 && config.dusk_temp > 9000)) {
         fprintf(stderr, "Temp (%d) must be lower than or equal to 9000\n", config.low_temp);
         goto end;
     }

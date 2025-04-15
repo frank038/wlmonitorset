@@ -56,8 +56,8 @@ wlr-gamma-control-unstable-v1. Can be used three periods of the day.
     Name of output (display) to use (default: all)."
 
 *-f <type>*
-    1 linear interpolation; 2 previous behaviour.
-    Use the data in the data_array file as starting curve,
+    1 sunrise only; 2 sunrise and sunset (do not work).
+    Use the data in the data_array file as colour curves,
     that becomes the default starting rgb values for the monitor.
     The data_array file is a text file containing three rows, one per colour,
     newline terminated.
@@ -71,8 +71,8 @@ wlr-gamma-control-unstable-v1. Can be used three periods of the day.
 
 *-B <value:value:value>*
     Set the brightness for sunrise, sunset and dusk. From 0.3 to 1.0.
-    If used with -f, make sure to use 1.0:value:value to preserve the
-    starting curve.
+    If used with -f, make sure to use 1.0:value:value (or 1.0:1.0:b)
+    to preserve the curves.
 
 The value 6500 is the neutral value, no colours corrections.
 For the three periods of the day, any temperature values can be used.
