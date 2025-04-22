@@ -47,14 +47,15 @@ wlr-gamma-control-unstable-v1
 
 *-f <type>*
     1 sunrise only; 2 sunrise and sunset (do not work).
-    Use the data in the data_array file as colour curves,
-    that becomes the default starting rgb values for the monitor.
-    The data_array file is a text file containing three rows, one per colour,
-    newline terminated.
+    Use the data in the data_array files (data_array for sunrise, 
+    data_array2 for sunset) as colour curves,
+    that become/becomes the rgb values for the monitor.
+    The data_array files are a text file containing three rows, 
+    one per colour, newline terminated.
     Each row has 256 values, float numbers from 0.0 to 1.0.
     If used, the next colour corrections will be applied on to this curve.
     The gamma option has no effect with this option.
-
+    
 *-b <value>*
     Set the brightness globally. From 0.3 to 1.0. Do not use with -f,
     use -B instead to preserve the curves.
@@ -86,6 +87,8 @@ for example: ./create_curve -r 0.0:0.5:1.0 -g 0.0:0.5:1.0 -b 0.0:0.5:1.0
 - from 0.0 to 1.0 - will be implemented in the file data_array, 
 that can be used by wlmonitorset if the case). The number of data 
 per colour channel to pass as options must be 3 or 5 or 8.
+Limitations: the curves must be monotonic (the value of each point must be 
+greater than the value of the previous one; their slope can be of any type).
 
 
 

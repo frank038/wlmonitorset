@@ -20,7 +20,7 @@
 #include "wlr-gamma-control-unstable-v1-client-protocol.h"
 #include "str_vec.h"
 
-#define WLMONITORSET_VERSION "0.6"
+#define WLMONITORSET_VERSION "0.6.1"
 #define MAX_STRING (256*23)
 
 int set_timer2(struct itimerspec timerspec,int t);
@@ -1035,17 +1035,23 @@ int f_time_to_add(int sunrise, int sunset, int dusk, int *time_to_add, int *what
         } else if (now_time >= c_s) { // now is sunset
             *what_cal = 2;
             *time_to_add = c_r+time_of_day; // tomorrow is sunrise
+        } else if (now_time < c_r) { // now is still sunset
+            *what_cal = 2;
+            *time_to_add = c_r;
         }
     } else if (c_d > 0) {
         if (now_time >= c_r && now_time < c_s) { // now is sunrise
             *what_cal = 1;
             *time_to_add = c_s; // next is sunset
-        } else if (now_time >= c_s && now_time < c_d) {
+        } else if (now_time >= c_s && now_time < c_d) { // now is sunset
             *what_cal = 2;
             *time_to_add = c_d; // next is sunrise
-        } else if (now_time >= c_d) {
+        } else if (now_time >= c_d) { // now is dusk
             *what_cal = 3;
-            *time_to_add = c_r+time_of_day; // next is dusk
+            *time_to_add = c_r+time_of_day; // tomorrow is sunrise
+        } else if (now_time < c_r) { // now is still sunset
+            *what_cal = 2;
+            *time_to_add = c_r;
         }
     }
     //time_t next_time = *time_to_add;
