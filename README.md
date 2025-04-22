@@ -65,11 +65,11 @@ The -f 1 option has priority over the -T option.
 
 *-f <type>*
     1 sunrise only; 2 sunrise and sunset (do not work).
-    Use the data in the data_array files (data_array for sunrise, data_array2
-    for sunset) as colour curves,
-    that becomes the default starting rgb values for the monitor.
-    The data_array files are text files containing three rows, one per colour,
-    newline terminated.
+    Use the data in the data_array files (data_array for sunrise, 
+    data_array2 for sunset) as colour curves,
+    that become/becomes the rgb values for the monitor.
+    The data_array files are a text file containing three rows, 
+    one per colour, newline terminated.
     Each row has 256 values, float numbers from 0.0 to 1.0.
     If used, the next colour corrections will be applied on to this curve.
     The gamma option has no effect with this option.
