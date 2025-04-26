@@ -21,7 +21,7 @@ wlr-gamma-control-unstable-v1
 	Set low temperature (default: 4500).
 
 *-m* <temp>
-	Set very low temperture - opional (default 0: not used).
+	Set very low temperture - opional (default 0: not used) (to do).
 
 *-S* <sunrise>
 	Manual time for sunrise as HH:MM (default 08:00).
@@ -30,7 +30,7 @@ wlr-gamma-control-unstable-v1
 	Manual time for sunset as HH:MM (default 18:00).
 
 *-M* <long>
-	Manual time for dusk as HH:MM - optional (e.g. 21:30).
+	Manual time for dusk as HH:MM - optional (e.g. 21:30) (to do).
 
 *-d* <duration>
 	Manual animation time in seconds (default 60).
@@ -46,7 +46,7 @@ wlr-gamma-control-unstable-v1
     Name of output (display) to use (default: all)."
 
 *-f <type>*
-    1 sunrise only; 2 sunrise and sunset (do not work).
+    1 sunrise only; 2 sunrise and sunset (to do).
     Use the data in the data_array files (data_array for sunrise, 
     data_array2 for sunset) as colour curves,
     that become/becomes the rgb values for the monitor.

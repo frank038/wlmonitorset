@@ -20,7 +20,7 @@
 #include "wlr-gamma-control-unstable-v1-client-protocol.h"
 #include "str_vec.h"
 
-#define WLMONITORSET_VERSION "0.6.1"
+#define WLMONITORSET_VERSION "0.7"
 #define MAX_STRING (256*23)
 
 int set_timer2(struct itimerspec timerspec,int t);
@@ -477,7 +477,7 @@ static void fill_gamma_table(uint16_t *table, uint32_t ramp_size, double rw,
 
 // linear interpolation
 // one curve
-// at sunrise
+// sunrise to sunset - sunset to sunrise
 static void fill_gamma_table0(uint16_t *table, uint32_t ramp_size, double rrw,
                             double ggw, double bbw, float now_bright) {
     uint16_t *r = table;
@@ -548,7 +548,7 @@ static void fill_gamma_table2(uint16_t *table, uint32_t ramp_size, double rrw,
     uint16_t *r = table;
     uint16_t *g = table + ramp_size;
     uint16_t *b = table + 2 * ramp_size;
-
+    
     int step_ramp_size = (ramp_size/256);
     int mod_ramp_size = (ramp_size%256);
     
@@ -1243,15 +1243,15 @@ static int wlrun(struct config cfg) {
                 timerspec.it_value.tv_sec = time_to_add;
                 printf("Next change at: %s\n", ctime(&timerspec.it_value.tv_sec));
                 /*  next time data calculations  */
-                if (what_cal == 1) {
+                if (what_cal == 1) { // now in sunrise time, next sunset
                     temp_to_step = (htemp2-ltemp2);
-                } else if (what_cal == 2) {
+                } else if (what_cal == 2) { // now is sunset, next dusk or sunrise
                     if (dtemp > 0) {
                         temp_to_step = (ltemp2-dtemp2);
                     } else {
                         temp_to_step = (ltemp2-htemp2);
                     }
-                } else if (what_cal == 3) {
+                } else if (what_cal == 3) { // now is dusk, next sunrise
                     temp_to_step = (dtemp2-htemp2);
                 }
                 time_to_remove = ctx.config.duration;
@@ -1276,7 +1276,11 @@ static int wlrun(struct config cfg) {
                     what_cal = 2;
                 } else if (prev_what_cal == 2) {
                     prev_bright = sunsetbright;
-                    now_bright = duskbright;
+                    if (icfile == 2) {
+                        now_bright = duskbright;
+                    } else {
+                        now_bright = sunrisebright;
+                    }
                     if (ctx.config.dusk_temp > 0) {
                         what_cal = 3;
                     } else {
@@ -1308,13 +1312,13 @@ static const char usage[] = "usage: %s [options]\n"
 "                   by default all outputs are used\n"
 "                   can be specified multiple times\n"
 "  -f <type>        use the data_array files as colour curves:\n"
-"                   type: 1 for sunrise only or 2 with sunset (do not work)\n"
+"                   type: 1 for sunrise only or 2 with sunset (to do)\n"
 "  -T <temp>        set high temperature (default: 6500)\n"
 "  -t <temp>        set low temperature (default: 4500)\n"
-"  -m <temp>        set dusk temperature - optional (default: 0 - not used)\n"
+"  -m <temp>        set dusk temperature - optional (default: 0 - not used) (to do)\n"
 "  -S <sunrise>     set manual sunrise (default 08:00)\n"
 "  -s <sunset>      set manual sunset (default 18:00)\n"
-"  -M <dusk>        set manual dusk - optional (e.g. 23:30)\n"
+"  -M <dusk>        set manual dusk - optional (e.g. 23:30) (to do)\n"
 "  -d <duration>    set manual duration in seconds (default 60)\n"
 "  -g <gamma>       set gamma (default: 1.0); not with the -f option\n"
 "  -b <brightness>  set the brightness globally: 0.3-1.0\n"
