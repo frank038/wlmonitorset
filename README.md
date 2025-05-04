@@ -5,7 +5,7 @@ wlmonitorset
 Command line night light application for wlroots compositors.
 This work is from wlsunset.
 
-In development and testing stage. Dusk and two curves option are in todo state.
+In development and testing stage. Dusk and two curves options are in todo state.
 
 How to build:
 
